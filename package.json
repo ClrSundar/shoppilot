@@ -1,0 +1,35 @@
+{
+  "name": "shoppilot",
+  "version": "1.0.0",
+  "description": "Run Your Business on Autopilot",
+  "private": true,
+  "author": "Sundara Vadivelu Rajendran",
+  "license": "ISC",
+  "keywords": [],
+  "packageManager": "pnpm@11.5.2",
+  "bugs": {
+    "url": "https://github.com/ClrSundar/shoppilot/issues"
+  },
+  "homepage": "https://github.com/ClrSundar/shoppilot#readme",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClrSundar/shoppilot.git"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.17"
+  }
+}

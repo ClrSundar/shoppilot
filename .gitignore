@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+coverage
+
+.env
+.env.*
+
+!.env.example
+
+.vscode
+.DS_Store
+
+.turbo
