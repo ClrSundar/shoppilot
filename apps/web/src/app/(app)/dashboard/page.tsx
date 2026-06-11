@@ -14,13 +14,10 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <AppLayout>
-        <div style={{ padding: 40 }}>
-            <h2>Dashboard</h2>
+    <div style={{ padding: 40 }}>
+      <h2>Dashboard</h2>
 
-            <pre>{JSON.stringify(me, null, 2)}</pre>
-            </div>
-    </AppLayout>
-    
+      <pre>{JSON.stringify(me, null, 2)}</pre>
+    </div>
   );
 }

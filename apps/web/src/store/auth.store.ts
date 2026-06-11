@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 type AuthState = {
   token: string | null;
@@ -6,16 +7,17 @@ type AuthState = {
   logout: () => void;
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
-  token: null,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      token: null,
 
-  setToken: (token) => {
-    localStorage.setItem('token', token);
-    set({ token });
-  },
+      setToken: (token) => set({ token }),
 
-  logout: () => {
-    localStorage.removeItem('token');
-    set({ token: null });
-  },
-}));
+      logout: () => set({ token: null }),
+    }),
+    {
+      name: 'shoppilot-auth',
+    },
+  ),
+);
