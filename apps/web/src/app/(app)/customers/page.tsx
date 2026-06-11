@@ -1,3 +1,149 @@
-export default function Page() {
-  return <h1>Customers</h1>;
+'use client';
+
+import { useState } from 'react';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { Customer, customersService } from '@/services/customers.service';
+
+export default function CustomersPage() {
+  const queryClient = useQueryClient();
+
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [gstNumber, setGstNumber] = useState('');
+
+  const { data: customers = [], isLoading } = useQuery({
+    queryKey: ['customers'],
+    queryFn: customersService.getAll,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: customersService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setOpen(false);
+      setName('');
+      setPhone('');
+      setEmail('');
+      setAddress('');
+      setGstNumber('');
+    },
+  });
+
+  const columns: GridColDef<Customer>[] = [
+    { field: 'name', headerName: 'Name', flex: 1 },
+    { field: 'phone', headerName: 'Phone', flex: 1 },
+    { field: 'email', headerName: 'Email', flex: 1 },
+    { field: 'address', headerName: 'Address', flex: 1 },
+    { field: 'gstNumber', headerName: 'GST Number', flex: 1 },
+  ];
+
+  const handleCreate = () => {
+    createMutation.mutate({
+      name,
+      phone,
+      email,
+      address,
+      gstNumber,
+    });
+  };
+
+  return (
+    <Box>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 2,
+        }}
+      >
+        <Typography variant="h5">Customers</Typography>
+
+        <Button variant="contained" onClick={() => setOpen(true)}>
+          Add Customer
+        </Button>
+      </Box>
+
+      <Box sx={{ height: 500 }}>
+        <DataGrid
+          rows={customers}
+          columns={columns}
+          loading={isLoading}
+          getRowId={(row) => row.id}
+          disableRowSelectionOnClick
+        />
+      </Box>
+
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Add Customer</DialogTitle>
+
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+            />
+
+            <TextField
+              label="Phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              fullWidth
+            />
+
+            <TextField
+              label="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              fullWidth
+            />
+
+            <TextField
+              label="Address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              fullWidth
+            />
+
+            <TextField
+              label="GST Number"
+              value={gstNumber}
+              onChange={(e) => setGstNumber(e.target.value)}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancel</Button>
+
+          <Button
+            variant="contained"
+            onClick={handleCreate}
+            disabled={!name || createMutation.isPending}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
 }

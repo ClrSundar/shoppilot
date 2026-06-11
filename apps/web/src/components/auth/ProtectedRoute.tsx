@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -11,19 +11,12 @@ export function ProtectedRoute({
 }) {
   const router = useRouter();
   const token = useAuthStore((state) => state.token);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted && !token) {
+    if (!token) {
       router.replace('/login');
     }
-  }, [mounted, token, router]);
-
-  if (!mounted) return null;
+  }, [token, router]);
 
   if (!token) return null;
 

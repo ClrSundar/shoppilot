@@ -1,14 +1,27 @@
 'use client';
 
-import { AppLayout } from '@/components/layout/AppLayout';
 import { api } from '@/lib/api';
 import { useEffect, useState } from 'react';
 
+type CurrentUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  tenant: {
+    id: string;
+    name: string;
+    code: string;
+    businessType: string;
+  };
+};
+
+
 export default function Dashboard() {
-  const [me, setMe] = useState<any>(null);
+  const [me, setMe] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
-    api.get('/auth/me').then((res) => {
+    api.get<CurrentUser>('/auth/me').then((res) => {
       setMe(res.data);
     });
   }, []);
