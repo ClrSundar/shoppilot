@@ -26,6 +26,11 @@ export const customersService = {
     return res.data;
   },
 
+  update: async (id: string, payload: Partial<Customer>) => {
+    const res = await api.put<Customer>(`/customers/${id}`, payload);
+    return res.data;
+  },
+
   create: async (payload: CreateCustomerPayload) => {
     const res = await api.post<Customer>('/customers', payload);
     return res.data;

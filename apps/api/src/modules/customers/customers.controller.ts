@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Put,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -14,13 +15,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    tenantId: string;
-    [key: string]: any;
-  };
-}
+import { UpdateCustomerDto } from './dto/update-customer.dto';
+import type { JwtPayload } from 'src/common/types/jwt-payload.type';
+import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 
 @ApiTags('Customers')
 @ApiBearerAuth('JWT-auth')
@@ -30,17 +27,26 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
-  create(@Request() req: AuthenticatedRequest, @Body() dto: CreateCustomerDto) {
-    return this.customersService.create(req.user.tenantId, dto);
+  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateCustomerDto) {
+    return this.customersService.create(user.tenantId, dto);
   }
 
   @Get()
-  findAll(@Request() req: AuthenticatedRequest) {
-    return this.customersService.findAll(req.user.tenantId);
+  findAll(@CurrentUser() user: JwtPayload) {
+    return this.customersService.findAll(user.tenantId);
   }
 
   @Get(':id')
-  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.customersService.findOne(req.user.tenantId, id);
+  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.customersService.findOne(user.tenantId, id);
+  }
+
+  @Put(':id')
+  update(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateCustomerDto,
+  ) {
+    return this.customersService.update(user.tenantId, id, dto);
   }
 }

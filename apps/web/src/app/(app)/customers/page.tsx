@@ -27,6 +27,7 @@ export default function CustomersPage() {
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [gstNumber, setGstNumber] = useState('');
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   const { data: customers = [], isLoading } = useQuery({
     queryKey: ['customers'],
@@ -54,17 +55,73 @@ export default function CustomersPage() {
     { field: 'email', headerName: 'Email', flex: 1 },
     { field: 'address', headerName: 'Address', flex: 1 },
     { field: 'gstNumber', headerName: 'GST Number', flex: 1 },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 120,
+      renderCell: (params) => (
+        <Button
+          size="small"
+          onClick={() => handleEdit(params.row)}
+        >
+          Edit
+        </Button>
+      ),
+    }
   ];
 
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Partial<Customer>;
+    }) =>
+      customersService.update(id, payload),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['customers'],
+      });
+
+      setEditingCustomer(null);
+      setOpen(false);
+    },
+  });
+
   const handleCreate = () => {
-    createMutation.mutate({
+    const payload = {
       name,
       phone,
       whatsappNumber,
       email,
       address,
       gstNumber,
-    });
+    };
+
+    if (editingCustomer) {
+      updateMutation.mutate({
+        id: editingCustomer.id,
+        payload,
+      });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const handleEdit = (customer: Customer) => {
+    setEditingCustomer(customer);
+
+    setName(customer.name);
+    setPhone(customer.phone ?? '');
+    setWhatsappNumber(
+      customer.whatsappNumber ?? '',
+    );
+    setEmail(customer.email ?? '');
+    setAddress(customer.address ?? '');
+
+    setOpen(true);
   };
 
   return (
@@ -95,7 +152,7 @@ export default function CustomersPage() {
       </Box>
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Add Customer</DialogTitle>
+        <DialogTitle>{editingCustomer ? 'Edit Customer' : 'Add Customer'}</DialogTitle>
 
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
@@ -151,7 +208,7 @@ export default function CustomersPage() {
             onClick={handleCreate}
             disabled={!name || createMutation.isPending}
           >
-            Save
+            {editingCustomer ? 'Update' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>

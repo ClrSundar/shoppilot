@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { UpdateCustomerDto } from './dto/update-customer.dto';
 
 @Injectable()
 export class CustomersService {
@@ -48,5 +49,15 @@ export class CustomersService {
     }
 
     return customer;
+  }
+
+  async update(tenantId: string, id: string, dto: UpdateCustomerDto) {
+    return this.prisma.customer.update({
+      where: {
+        id,
+        tenantId,
+      },
+      data: dto,
+    });
   }
 }
