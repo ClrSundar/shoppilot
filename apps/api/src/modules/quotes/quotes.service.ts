@@ -115,7 +115,23 @@ export class QuotesService {
         tenantId,
       },
       include: {
-        customer: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            whatsappNumber: true,
+            address: true,
+            gstNumber: true,
+            active: true,
+          },
+        },
+        items: {
+          include: {
+            product: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -130,8 +146,23 @@ export class QuotesService {
         tenantId,
       },
       include: {
-        customer: true,
-        items: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            whatsappNumber: true,
+            address: true,
+            gstNumber: true,
+            active: true,
+          },
+        },
+        items: {
+          include: {
+            product: true,
+          },
+        },
       },
     });
   }
