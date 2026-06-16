@@ -146,4 +146,24 @@ export class QuotesService {
       },
     });
   }
+
+  async getQuotePdfData(tenantId: string, quoteId: string) {
+    const quote = await this.prisma.quote.findFirst({
+      where: {
+        id: quoteId,
+        tenantId,
+      },
+      include: {
+        tenant: true,
+        customer: true,
+        items: true,
+      },
+    });
+
+    if (!quote) {
+      throw new BadRequestException('Quote not found');
+    }
+
+    return quote;
+  }
 }

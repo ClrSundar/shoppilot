@@ -252,6 +252,18 @@ export default function QuotesPage() {
               <Typography sx={{ mt: 2 }} align="right">
                 Total: ₹{selectedQuote.totalAmount}
               </Typography>
+
+              <Button
+                variant="contained"
+                onClick={() =>
+                  window.open(
+                    `${process.env.NEXT_PUBLIC_API_URL}/quotes/${selectedQuote.id}/pdf`,
+                    '_blank',
+                  )
+                }
+              >
+                Download PDF
+              </Button>
             </Box>
           )}
         </DialogContent>
