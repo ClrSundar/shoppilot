@@ -19,6 +19,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Quote, quotesService } from '@/services/quotes.service';
 import { productsService } from '@/services/products.service';
 import { customersService } from '@/services/customers.service';
+import { Select, FormControl, InputLabel } from '@mui/material';
+import type { QuoteStatus } from '@/services/quotes.service';
 
 type QuoteDraftItem = {
   productId: string;
@@ -69,6 +71,23 @@ export default function QuotesPage() {
       setProductId('');
       setQuantity('1');
       setItems([]);
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: QuoteStatus;
+    }) => quotesService.updateStatus(id, status),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotes'] });
+      queryClient.invalidateQueries({
+        queryKey: ['quote', selectedQuoteId],
+      });
     },
   });
 
@@ -179,7 +198,26 @@ export default function QuotesPage() {
           {selectedQuote && (
             <Box>
               <Typography>Customer: {selectedQuote.customer.name}</Typography>
-              <Typography>Status: {selectedQuote.status}</Typography>
+              <FormControl fullWidth sx={{ mt: 2 }}>
+                <InputLabel>Status</InputLabel>
+
+                <Select
+                  label="Status"
+                  value={selectedQuote.status}
+                  onChange={(e) =>
+                    updateStatusMutation.mutate({
+                      id: selectedQuote.id,
+                      status: e.target.value as QuoteStatus,
+                    })
+                  }
+                >
+                  <MenuItem value="DRAFT">Draft</MenuItem>
+                  <MenuItem value="SENT">Sent</MenuItem>
+                  <MenuItem value="APPROVED">Approved</MenuItem>
+                  <MenuItem value="REJECTED">Rejected</MenuItem>
+                  <MenuItem value="EXPIRED">Expired</MenuItem>
+                </Select>
+              </FormControl>
 
               <Typography sx={{ mt: 2, mb: 1 }}>Items</Typography>
 
