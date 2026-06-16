@@ -115,18 +115,7 @@ export class QuotesService {
         tenantId,
       },
       include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            whatsappNumber: true,
-            address: true,
-            gstNumber: true,
-            active: true,
-          },
-        },
+        customer: true,
         items: {
           include: {
             product: true,
@@ -146,18 +135,7 @@ export class QuotesService {
         tenantId,
       },
       include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            whatsappNumber: true,
-            address: true,
-            gstNumber: true,
-            active: true,
-          },
-        },
+        customer: true,
         items: {
           include: {
             product: true,
