@@ -23,6 +23,7 @@ export default function CustomersPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [gstNumber, setGstNumber] = useState('');
@@ -39,6 +40,7 @@ export default function CustomersPage() {
       setOpen(false);
       setName('');
       setPhone('');
+      setWhatsappNumber('');
       setEmail('');
       setAddress('');
       setGstNumber('');
@@ -48,6 +50,7 @@ export default function CustomersPage() {
   const columns: GridColDef<Customer>[] = [
     { field: 'name', headerName: 'Name', flex: 1 },
     { field: 'phone', headerName: 'Phone', flex: 1 },
+    { field: 'whatsappNumber', headerName: 'WhatsApp Number', flex: 1 },
     { field: 'email', headerName: 'Email', flex: 1 },
     { field: 'address', headerName: 'Address', flex: 1 },
     { field: 'gstNumber', headerName: 'GST Number', flex: 1 },
@@ -57,6 +60,7 @@ export default function CustomersPage() {
     createMutation.mutate({
       name,
       phone,
+      whatsappNumber,
       email,
       address,
       gstNumber,
@@ -106,6 +110,13 @@ export default function CustomersPage() {
               label="Phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              fullWidth
+            />
+
+            <TextField
+              label="WhatsApp Number"
+              value={whatsappNumber}
+              onChange={(e) => setWhatsappNumber(e.target.value)}
               fullWidth
             />
 

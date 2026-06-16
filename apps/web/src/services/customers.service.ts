@@ -4,6 +4,7 @@ export type Customer = {
   id: string;
   name: string;
   phone?: string | null;
+  whatsappNumber?: string | null;
   email?: string | null;
   address?: string | null;
   gstNumber?: string | null;
@@ -13,6 +14,7 @@ export type Customer = {
 export type CreateCustomerPayload = {
   name: string;
   phone?: string;
+  whatsappNumber?: string;
   email?: string;
   address?: string;
   gstNumber?: string;

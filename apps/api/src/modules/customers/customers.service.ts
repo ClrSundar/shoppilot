@@ -15,6 +15,7 @@ export class CustomersService {
 
         name: dto.name,
         phone: dto.phone,
+        whatsappNumber: dto.whatsappNumber,
         email: dto.email,
         address: dto.address,
         gstNumber: dto.gstNumber,

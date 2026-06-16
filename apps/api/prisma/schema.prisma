@@ -121,26 +121,27 @@ model Product {
 }
 
 model Customer {
-  id          String   @id @default(uuid())
+  id              String   @id @default(uuid())
 
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
 
-  name        String
+  name            String
 
-  phone       String?
-  email       String?
+  phone           String?
+  whatsappNumber  String?
+  email           String?
 
-  address     String?
+  address         String?
 
-  gstNumber   String?
+  gstNumber       String?
 
-  active      Boolean  @default(true)
+  active          Boolean  @default(true)
 
-  quotes      Quote[]
+  quotes          Quote[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([tenantId])
   @@index([name])

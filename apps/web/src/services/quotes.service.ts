@@ -12,6 +12,7 @@ export type Quote = {
     id: string;
     name: string;
     phone?: string | null;
+    whatsappNumber?: string | null;
   };
   items?: {
     id: string;
