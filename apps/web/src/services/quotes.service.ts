@@ -22,6 +22,8 @@ export type Quote = {
   }[];
 };
 
+export type QuoteStatus = 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+
 export const quotesService = {
   getAll: async () => {
     const res = await api.get<Quote[]>('/quotes');
@@ -43,6 +45,11 @@ export const quotesService = {
 
     return res.data;
   },
+
+  updateStatus: async (id: string, status: QuoteStatus) => {
+    const res = await api.patch<Quote>(`/quotes/${id}/status`, { status });
+    return res.data;
+  },
 };
 
 export type CreateQuotePayload = {
@@ -52,4 +59,6 @@ export type CreateQuotePayload = {
     quantity: number;
   }[];
 };
+
+
 

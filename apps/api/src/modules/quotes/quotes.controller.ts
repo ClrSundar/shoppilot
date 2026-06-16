@@ -16,6 +16,8 @@ import { QuotesService } from './quotes.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/types/jwt-payload.type';
+import { Patch } from '@nestjs/common';
+import { UpdateQuoteStatusDto } from './dto/update-quote-status.dto';
 
 @ApiTags('Quotes')
 @ApiBearerAuth('JWT-auth')
@@ -36,5 +38,14 @@ export class QuotesController {
   @Get(':id')
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.quotesService.findOne(user.tenantId, id);
+  }
+
+  @Patch(':id/status')
+  updateStatus(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateQuoteStatusDto,
+  ) {
+    return this.quotesService.updateStatus(user.tenantId, id, dto.status);
   }
 }

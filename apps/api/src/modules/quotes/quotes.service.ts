@@ -3,6 +3,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 import { CreateQuoteDto } from './dto/create-quote.dto';
+import { QuoteStatus } from '@prisma/client';
 
 @Injectable()
 export class QuotesService {
@@ -112,6 +113,32 @@ export class QuotesService {
       where: {
         id: quoteId,
         tenantId,
+      },
+      include: {
+        customer: true,
+        items: true,
+      },
+    });
+  }
+
+  async updateStatus(tenantId: string, quoteId: string, status: QuoteStatus) {
+    const quote = await this.prisma.quote.findFirst({
+      where: {
+        id: quoteId,
+        tenantId,
+      },
+    });
+
+    if (!quote) {
+      throw new BadRequestException('Quote not found');
+    }
+
+    return this.prisma.quote.update({
+      where: {
+        id: quoteId,
+      },
+      data: {
+        status,
       },
       include: {
         customer: true,
