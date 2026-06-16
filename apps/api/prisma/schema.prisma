@@ -167,9 +167,12 @@ model Quote {
 
   status        QuoteStatus  @default(DRAFT)
 
-  subtotal      Decimal      @db.Decimal(12,2)
-  taxAmount     Decimal      @db.Decimal(12,2)
-  totalAmount   Decimal      @db.Decimal(12,2)
+  subtotal        Decimal       @db.Decimal(12,2)
+  taxAmount       Decimal       @db.Decimal(12,2)
+  totalAmount     Decimal       @db.Decimal(12,2)
+  validUntil      DateTime?
+  discountAmount  Decimal       @default(0) @db.Decimal(12,2)
+  taxPercentage   Decimal       @default(0) @db.Decimal(5,2)
 
   notes         String?
 
