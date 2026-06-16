@@ -76,7 +76,7 @@ export default function Dashboard() {
         }}
       >
         <CardContent sx={{ p: { xs: 2.5, md: 4 } }}>
-          <Grid container spacing={2} alignItems="center">
+          <Grid container spacing={2} sx={{ alignItems: 'center' }}>
             <Grid size={{ xs: 12, md: 8 }}>
               <Stack spacing={1.5}>
                 <Chip
@@ -161,7 +161,7 @@ export default function Dashboard() {
               }}
             >
               <CardContent>
-                <Stack direction="row" alignItems="center" spacing={1.2} sx={{ mb: 1 }}>
+                <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center', mb: 1 }}>
                   <Image src={card.icon} alt={card.label} width={24} height={24} />
                   <Typography color="text.secondary">{card.label}</Typography>
                 </Stack>
