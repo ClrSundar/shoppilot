@@ -55,55 +55,24 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // Find all users with this email (across all tenants)
-    const users = await this.prisma.user.findMany({
+    // Find user by email (now globally unique)
+    const user = await this.prisma.user.findUnique({
       where: {
         email: dto.email,
-        active: true,
-      },
-      include: {
-        tenant: true,
       },
     });
 
-    if (users.length === 0) {
+    if (!user || !user.active) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check password against each user
-    const validUsers: typeof users = [];
-    for (const user of users) {
-      const validPassword = await bcrypt.compare(dto.password, user.password);
-      if (validPassword) {
-        validUsers.push(user);
-      }
-    }
+    const validPassword = await bcrypt.compare(dto.password, user.password);
 
-    if (validUsers.length === 0) {
+    if (!validPassword) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // If tenantId is provided, find the matching user and generate token
-    if (dto.tenantId) {
-      const user = validUsers.find((u) => u.tenantId === dto.tenantId);
-      if (!user) {
-        throw new UnauthorizedException('Invalid tenant selection');
-      }
-      return this.generateToken(user);
-    }
-
-    // If only one valid user, auto-select and return token
-    if (validUsers.length === 1) {
-      return this.generateToken(validUsers[0]);
-    }
-
-    // If multiple tenants, return list for user to select
-    return {
-      tenants: validUsers.map((u) => ({
-        id: u.tenantId,
-        name: u.tenant.name,
-      })),
-    };
+    return this.generateToken(user);
   }
 
   private generateToken(user: any) {

@@ -9,7 +9,6 @@ import {
 
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { LoginResponseDto } from './dto/login-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ApiBearerAuth } from '@nestjs/swagger';
@@ -24,7 +23,7 @@ export class AuthController {
   }
 
   @Post('login')
-  login(@Body() dto: LoginDto): Promise<LoginResponseDto> {
+  login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
 

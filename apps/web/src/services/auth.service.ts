@@ -3,17 +3,11 @@ import { api } from '@/lib/api';
 export type LoginPayload = {
   email: string;
   password: string;
-  tenantId?: string;
 };
 
-export type TenantOption = {
-  id: string;
-  name: string;
+export type LoginResponse = {
+  accessToken: string;
 };
-
-export type LoginResponse = 
-  | { accessToken: string; tenants?: never }
-  | { tenants: TenantOption[]; accessToken?: never };
 
 export type RegisterPayload = {
   shopName: string;
