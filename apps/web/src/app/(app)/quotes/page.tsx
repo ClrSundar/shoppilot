@@ -153,6 +153,30 @@ export default function QuotesPage() {
     });
   };
 
+  const handleWhatsAppShare = () => {
+    if (!selectedQuote) return;
+
+    const phone = selectedQuote.customer.phone?.replace(/\D/g, '');
+
+    const message = `
+      Quotation ${selectedQuote.quoteNumber}
+
+      Customer: ${selectedQuote.customer.name}
+
+      Status: ${selectedQuote.status}
+
+      Total: ₹${selectedQuote.totalAmount}
+
+      Generated via ShopPilot.
+      `;
+
+    const url = phone
+      ? `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+    window.open(url, '_blank');
+  };
+
   const draftTotal = items.reduce(
     (total, item) => total + item.quantity * item.unitPrice,
     0,
@@ -258,6 +282,12 @@ export default function QuotesPage() {
                 onClick={() => quotesService.downloadPdf(selectedQuote.id)}
               >
                 Download PDF
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => handleWhatsAppShare()}
+              >
+                Share on WhatsApp
               </Button>
             </Box>
           )}
