@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -48,5 +49,10 @@ export class CustomersController {
     @Body() dto: UpdateCustomerDto,
   ) {
     return this.customersService.update(user.tenantId, id, dto);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.customersService.remove(user.tenantId, id);
   }
 }

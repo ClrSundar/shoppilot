@@ -16,6 +16,8 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { AppToast } from '@/components/common/AppToast';
+import { useAppToast } from '@/hooks/use-app-toast';
 import { Quote, quotesService } from '@/services/quotes.service';
 import { productsService } from '@/services/products.service';
 import { customersService } from '@/services/customers.service';
@@ -31,14 +33,23 @@ type QuoteDraftItem = {
 
 export default function QuotesPage() {
   const queryClient = useQueryClient();
+  const { toast, showToast, closeToast } = useAppToast();
 
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
 
   const [customerId, setCustomerId] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [notes, setNotes] = useState('');
   const [items, setItems] = useState<QuoteDraftItem[]>([]);
+
+  const [editCustomerId, setEditCustomerId] = useState('');
+  const [editProductId, setEditProductId] = useState('');
+  const [editQuantity, setEditQuantity] = useState('1');
+  const [editNotes, setEditNotes] = useState('');
+  const [editItems, setEditItems] = useState<QuoteDraftItem[]>([]);
 
   const { data: quotes = [], isLoading } = useQuery({
     queryKey: ['quotes'],
@@ -70,8 +81,11 @@ export default function QuotesPage() {
       setCustomerId('');
       setProductId('');
       setQuantity('1');
+      setNotes('');
       setItems([]);
+      showToast('Quote created successfully', 'success');
     },
+    onError: () => showToast('Failed to create quote', 'error'),
   });
 
   const updateStatusMutation = useMutation({
@@ -88,7 +102,37 @@ export default function QuotesPage() {
       queryClient.invalidateQueries({
         queryKey: ['quote', selectedQuoteId],
       });
+
+      showToast('Quote status updated successfully', 'success');
     },
+    onError: () => showToast('Failed to update quote status', 'error'),
+  });
+
+  const updateDraftMutation = useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: {
+        customerId: string;
+        notes?: string;
+        items: {
+          productId: string;
+          quantity: number;
+        }[];
+      };
+    }) => quotesService.update(id, payload),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quotes'] });
+      queryClient.invalidateQueries({
+        queryKey: ['quote', selectedQuoteId],
+      });
+      setIsEditingDraft(false);
+      showToast('Draft quote updated successfully', 'success');
+    },
+    onError: () => showToast('Failed to update draft quote', 'error'),
   });
 
   const columns: GridColDef<Quote>[] = [
@@ -150,13 +194,161 @@ export default function QuotesPage() {
         productId: item.productId,
         quantity: item.quantity,
       })),
+      notes,
+    });
+  };
+
+  const handleStartDraftEdit = () => {
+    if (!selectedQuote || selectedQuote.status !== 'DRAFT') {
+      return;
+    }
+
+    setEditCustomerId(selectedQuote.customer.id);
+    setEditNotes(selectedQuote.notes ?? '');
+    setEditItems(
+      (selectedQuote.items ?? []).map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+      })),
+    );
+    setEditProductId('');
+    setEditQuantity('1');
+    setIsEditingDraft(true);
+  };
+
+  const handleAddEditItem = () => {
+    const product = products.find((p) => p.id === editProductId);
+
+    if (!product) {
+      return;
+    }
+
+    const qty = Number(editQuantity);
+
+    if (!qty || qty <= 0) {
+      return;
+    }
+
+    const unitPrice = Number(product.sellingPrice);
+
+    setEditItems((prevItems) => {
+      const existing = prevItems.find((item) => item.productId === product.id);
+
+      if (existing) {
+        return prevItems.map((item) =>
+          item.productId === product.id
+            ? {
+                ...item,
+                quantity: item.quantity + qty,
+              }
+            : item,
+        );
+      }
+
+      return [
+        ...prevItems,
+        {
+          productId: product.id,
+          productName: product.name,
+          quantity: qty,
+          unitPrice,
+        },
+      ];
+    });
+
+    setEditProductId('');
+    setEditQuantity('1');
+  };
+
+  const handleEditItemQuantityChange = (productIdToUpdate: string, value: string) => {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return;
+    }
+
+    setEditItems((prevItems) =>
+      prevItems.map((item) =>
+        item.productId === productIdToUpdate
+          ? {
+              ...item,
+              quantity: parsed,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const handleRemoveEditItem = (productIdToRemove: string) => {
+    setEditItems((prevItems) =>
+      prevItems.filter((item) => item.productId !== productIdToRemove),
+    );
+  };
+
+  const handleSaveDraftEdits = () => {
+    if (!selectedQuote || selectedQuote.status !== 'DRAFT') {
+      return;
+    }
+
+    updateDraftMutation.mutate({
+      id: selectedQuote.id,
+      payload: {
+        customerId: editCustomerId,
+        notes: editNotes,
+        items: editItems.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+      },
+    });
+  };
+
+  const handleDuplicateQuote = () => {
+    if (!selectedQuote) {
+      return;
+    }
+
+    setCustomerId(selectedQuote.customer.id);
+    setNotes(selectedQuote.notes ?? '');
+    setItems(
+      (selectedQuote.items ?? []).map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+      })),
+    );
+
+    setCreateOpen(true);
+    setSelectedQuoteId(null);
+    showToast('Quote duplicated into a new draft', 'success');
+  };
+
+  const handleCancelQuote = () => {
+    if (!selectedQuote) {
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to cancel this quote?')) {
+      return;
+    }
+
+    updateStatusMutation.mutate({
+      id: selectedQuote.id,
+      status: 'CANCELLED',
     });
   };
 
   const handleWhatsAppShare = () => {
     if (!selectedQuote) return;
 
-    const phone = selectedQuote.customer.phone?.replace(/\D/g, '');
+    const phone = (
+      selectedQuote.customer.whatsappNumber ||
+      selectedQuote.customer.phone ||
+      ''
+    ).replace(/\D/g, '');
 
     const message = `
       Quotation ${selectedQuote.quoteNumber}
@@ -212,7 +404,10 @@ export default function QuotesPage() {
 
       <Dialog
         open={Boolean(selectedQuoteId)}
-        onClose={() => setSelectedQuoteId(null)}
+        onClose={() => {
+          setSelectedQuoteId(null);
+          setIsEditingDraft(false);
+        }}
         fullWidth
         maxWidth="md"
       >
@@ -221,7 +416,119 @@ export default function QuotesPage() {
         <DialogContent>
           {selectedQuote && (
             <Box>
-              <Typography>Customer: {selectedQuote.customer.name}</Typography>
+              {selectedQuote.status === 'DRAFT' && isEditingDraft ? (
+                <Stack spacing={2} sx={{ mt: 1 }}>
+                  <TextField
+                    select
+                    label="Customer"
+                    value={editCustomerId}
+                    onChange={(e) => setEditCustomerId(e.target.value)}
+                    fullWidth
+                  >
+                    {customers.map((customer) => (
+                      <MenuItem key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField
+                    select
+                    label="Product"
+                    value={editProductId}
+                    onChange={(e) => setEditProductId(e.target.value)}
+                    fullWidth
+                  >
+                    {products.map((product) => (
+                      <MenuItem key={product.id} value={product.id}>
+                        {product.name} - ₹{product.sellingPrice}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField
+                    label="Quantity"
+                    type="number"
+                    value={editQuantity}
+                    onChange={(e) => setEditQuantity(e.target.value)}
+                    fullWidth
+                  />
+
+                  <Button
+                    variant="outlined"
+                    onClick={handleAddEditItem}
+                    disabled={!editProductId || Number(editQuantity) <= 0}
+                  >
+                    Add Item
+                  </Button>
+
+                  {editItems.map((item) => (
+                    <Stack
+                      key={item.productId}
+                      direction="row"
+                      spacing={2}
+                      sx={{ alignItems: 'center' }}
+                    >
+                      <Typography sx={{ minWidth: 180 }}>{item.productName}</Typography>
+
+                      <TextField
+                        label="Qty"
+                        type="number"
+                        size="small"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          handleEditItemQuantityChange(item.productId, e.target.value)
+                        }
+                        sx={{ width: 120 }}
+                      />
+
+                      <Typography sx={{ minWidth: 120 }}>
+                        ₹{item.quantity * item.unitPrice}
+                      </Typography>
+
+                      <Button
+                        color="error"
+                        onClick={() => handleRemoveEditItem(item.productId)}
+                      >
+                        Remove
+                      </Button>
+                    </Stack>
+                  ))}
+
+                  <TextField
+                    label="Notes"
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    multiline
+                    minRows={3}
+                    fullWidth
+                  />
+
+                  <Stack direction="row" spacing={2}>
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveDraftEdits}
+                      disabled={
+                        !editCustomerId ||
+                        editItems.length === 0 ||
+                        updateDraftMutation.isPending
+                      }
+                    >
+                      Save Draft Changes
+                    </Button>
+
+                    <Button onClick={() => setIsEditingDraft(false)}>Cancel</Button>
+                  </Stack>
+                </Stack>
+              ) : (
+                <>
+                  <Typography>Customer: {selectedQuote.customer.name}</Typography>
+                  {selectedQuote.notes && (
+                    <Typography sx={{ mt: 1 }}>Notes: {selectedQuote.notes}</Typography>
+                  )}
+                </>
+              )}
+
               <FormControl fullWidth sx={{ mt: 2 }}>
                 <InputLabel>Status</InputLabel>
 
@@ -240,6 +547,7 @@ export default function QuotesPage() {
                   <MenuItem value="APPROVED">Approved</MenuItem>
                   <MenuItem value="REJECTED">Rejected</MenuItem>
                   <MenuItem value="EXPIRED">Expired</MenuItem>
+                  <MenuItem value="CANCELLED">Cancelled</MenuItem>
                 </Select>
               </FormControl>
 
@@ -277,6 +585,24 @@ export default function QuotesPage() {
                 Total: ₹{selectedQuote.totalAmount}
               </Typography>
 
+              <Stack direction="row" spacing={1} sx={{ mt: 2, mb: 2 }}>
+                {selectedQuote.status === 'DRAFT' ? (
+                  <Button variant="outlined" onClick={handleStartDraftEdit}>
+                    Edit Draft Quote
+                  </Button>
+                ) : (
+                  <Button variant="outlined" onClick={handleDuplicateQuote}>
+                    Duplicate / Create Revision
+                  </Button>
+                )}
+
+                {selectedQuote.status !== 'CANCELLED' && (
+                  <Button color="error" variant="outlined" onClick={handleCancelQuote}>
+                    Cancel Quote
+                  </Button>
+                )}
+              </Stack>
+
               <Button
                 variant="contained"
                 onClick={() => quotesService.downloadPdf(selectedQuote.id)}
@@ -296,7 +622,10 @@ export default function QuotesPage() {
 
       <Dialog
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setNotes('');
+        }}
         fullWidth
         maxWidth="md"
       >
@@ -337,6 +666,15 @@ export default function QuotesPage() {
               type="number"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
+              fullWidth
+            />
+
+            <TextField
+              label="Notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              multiline
+              minRows={3}
               fullWidth
             />
 
@@ -383,7 +721,14 @@ export default function QuotesPage() {
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              setCreateOpen(false);
+              setNotes('');
+            }}
+          >
+            Cancel
+          </Button>
 
           <Button
             variant="contained"
@@ -394,6 +739,8 @@ export default function QuotesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <AppToast toast={toast} onClose={closeToast} />
     </Box>
   );
 }

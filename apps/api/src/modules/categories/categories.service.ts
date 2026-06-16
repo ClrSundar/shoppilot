@@ -1,8 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -37,6 +42,39 @@ export class CategoriesService {
       },
       orderBy: {
         name: 'asc',
+      },
+    });
+  }
+
+  async update(tenantId: string, id: string, dto: UpdateCategoryDto) {
+    return this.prisma.productCategory.update({
+      where: {
+        id,
+        tenantId,
+      },
+      data: dto,
+    });
+  }
+
+  async remove(tenantId: string, id: string) {
+    const category = await this.prisma.productCategory.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Category not found');
+    }
+
+    return this.prisma.productCategory.update({
+      where: {
+        id,
+        tenantId,
+      },
+      data: {
+        active: false,
       },
     });
   }

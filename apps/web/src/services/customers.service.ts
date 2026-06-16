@@ -35,4 +35,9 @@ export const customersService = {
     const res = await api.post<Customer>('/customers', payload);
     return res.data;
   },
+
+  delete: async (id: string) => {
+    const res = await api.delete<Customer>(`/customers/${id}`);
+    return res.data;
+  },
 };

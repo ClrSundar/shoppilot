@@ -8,6 +8,7 @@ export type Quote = {
   taxAmount: string;
   totalAmount: string;
   createdAt: string;
+  notes?: string | null;
   customer: {
     id: string;
     name: string;
@@ -16,6 +17,7 @@ export type Quote = {
   };
   items?: {
     id: string;
+    productId: string;
     productName: string;
     quantity: string;
     unitPrice: string;
@@ -23,7 +25,13 @@ export type Quote = {
   }[];
 };
 
-export type QuoteStatus = 'DRAFT' | 'SENT' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+export type QuoteStatus =
+  | 'DRAFT'
+  | 'SENT'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'CANCELLED';
 
 export const quotesService = {
   getAll: async () => {
@@ -35,15 +43,18 @@ export const quotesService = {
     const res = await api.get<Quote>(`/quotes/${id}`);
     return res.data;
   },
-  
-  create: async (
-    payload: CreateQuotePayload,
-    ) => {
+
+  create: async (payload: CreateQuotePayload) => {
     const res = await api.post(
-        '/quotes',
-        payload,
+      '/quotes',
+      payload,
     );
 
+    return res.data;
+  },
+
+  update: async (id: string, payload: UpdateQuotePayload) => {
+    const res = await api.put<Quote>(`/quotes/${id}`, payload);
     return res.data;
   },
 
@@ -78,7 +89,10 @@ export type CreateQuotePayload = {
     productId: string;
     quantity: number;
   }[];
+  notes?: string;
 };
+
+export type UpdateQuotePayload = CreateQuotePayload;
 
 
 

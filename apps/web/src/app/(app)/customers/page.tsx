@@ -15,6 +15,8 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { AppToast } from '@/components/common/AppToast';
+import { useAppToast } from '@/hooks/use-app-toast';
 import { Customer, customersService } from '@/services/customers.service';
 
 export default function CustomersPage() {
@@ -28,6 +30,9 @@ export default function CustomersPage() {
   const [address, setAddress] = useState('');
   const [gstNumber, setGstNumber] = useState('');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
+  const { toast, showToast, closeToast } = useAppToast();
 
   const { data: customers = [], isLoading } = useQuery({
     queryKey: ['customers'],
@@ -38,14 +43,10 @@ export default function CustomersPage() {
     mutationFn: customersService.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
-      setOpen(false);
-      setName('');
-      setPhone('');
-      setWhatsappNumber('');
-      setEmail('');
-      setAddress('');
-      setGstNumber('');
+      handleCloseDialog();
+      showToast('Customer created successfully', 'success');
     },
+    onError: () => showToast('Failed to create customer', 'error'),
   });
 
   const columns: GridColDef<Customer>[] = [
@@ -58,16 +59,23 @@ export default function CustomersPage() {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 120,
+      width: 180,
       renderCell: (params) => (
-        <Button
-          size="small"
-          onClick={() => handleEdit(params.row)}
-        >
-          Edit
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button size="small" onClick={() => handleEdit(params.row)}>
+            Edit
+          </Button>
+
+          <Button
+            size="small"
+            color="error"
+            onClick={() => handleDeleteClick(params.row)}
+          >
+            Delete
+          </Button>
+        </Stack>
       ),
-    }
+    },
   ];
 
   const updateMutation = useMutation({
@@ -85,10 +93,38 @@ export default function CustomersPage() {
         queryKey: ['customers'],
       });
 
-      setEditingCustomer(null);
-      setOpen(false);
+      handleCloseDialog();
+      showToast('Customer updated successfully', 'success');
     },
+    onError: () => showToast('Failed to update customer', 'error'),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: customersService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setDeleteDialogOpen(false);
+      setDeletingCustomer(null);
+      showToast('Customer deleted successfully', 'success');
+    },
+    onError: () => showToast('Failed to delete customer', 'error'),
+  });
+
+  const handleCloseDialog = () => {
+    setOpen(false);
+    setEditingCustomer(null);
+    setName('');
+    setPhone('');
+    setWhatsappNumber('');
+    setEmail('');
+    setAddress('');
+    setGstNumber('');
+  };
+
+  const handleOpenCreate = () => {
+    handleCloseDialog();
+    setOpen(true);
+  };
 
   const handleCreate = () => {
     const payload = {
@@ -124,6 +160,19 @@ export default function CustomersPage() {
     setOpen(true);
   };
 
+  const handleDeleteClick = (customer: Customer) => {
+    setDeletingCustomer(customer);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deletingCustomer) {
+      return;
+    }
+
+    deleteMutation.mutate(deletingCustomer.id);
+  };
+
   return (
     <Box>
       <Box
@@ -136,7 +185,7 @@ export default function CustomersPage() {
       >
         <Typography variant="h5">Customers</Typography>
 
-        <Button variant="contained" onClick={() => setOpen(true)}>
+        <Button variant="contained" onClick={handleOpenCreate}>
           Add Customer
         </Button>
       </Box>
@@ -151,7 +200,7 @@ export default function CustomersPage() {
         />
       </Box>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={open} onClose={handleCloseDialog} fullWidth maxWidth="sm">
         <DialogTitle>{editingCustomer ? 'Edit Customer' : 'Add Customer'}</DialogTitle>
 
         <DialogContent>
@@ -201,17 +250,45 @@ export default function CustomersPage() {
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
 
           <Button
             variant="contained"
             onClick={handleCreate}
-            disabled={!name || createMutation.isPending}
+            disabled={!name || createMutation.isPending || updateMutation.isPending}
           >
             {editingCustomer ? 'Update' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete Customer</DialogTitle>
+
+        <DialogContent>
+          Are you sure you want to delete {deletingCustomer?.name ?? 'this customer'}?
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDeleteConfirm}
+            disabled={deleteMutation.isPending}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <AppToast toast={toast} onClose={closeToast} />
     </Box>
   );
 }

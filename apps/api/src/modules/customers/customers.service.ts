@@ -60,4 +60,27 @@ export class CustomersService {
       data: dto,
     });
   }
+
+  async remove(tenantId: string, id: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return this.prisma.customer.update({
+      where: {
+        id,
+        tenantId,
+      },
+      data: {
+        active: false,
+      },
+    });
+  }
 }

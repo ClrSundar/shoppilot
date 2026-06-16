@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 
 @Injectable()
 export class ProductsService {
@@ -81,5 +82,68 @@ export class ProductsService {
     }
 
     return product;
+  }
+
+  async update(tenantId: string, id: string, dto: UpdateProductDto) {
+    const existingProduct = await this.prisma.product.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+    });
+
+    if (!existingProduct) {
+      throw new NotFoundException('Product not found');
+    }
+
+    if (dto.categoryId) {
+      const category = await this.prisma.productCategory.findFirst({
+        where: {
+          id: dto.categoryId,
+          tenantId,
+        },
+      });
+
+      if (!category) {
+        throw new BadRequestException('Invalid category');
+      }
+    }
+
+    return this.prisma.product.update({
+      where: {
+        id,
+        tenantId,
+      },
+      data: dto,
+      include: {
+        category: true,
+      },
+    });
+  }
+
+  async remove(tenantId: string, id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    return this.prisma.product.update({
+      where: {
+        id,
+        tenantId,
+      },
+      data: {
+        active: false,
+      },
+      include: {
+        category: true,
+      },
+    });
   }
 }

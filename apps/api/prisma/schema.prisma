@@ -153,6 +153,7 @@ enum QuoteStatus {
   APPROVED
   REJECTED
   EXPIRED
+  CANCELLED
 }
 
 model Quote {

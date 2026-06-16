@@ -16,19 +16,29 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { AppToast } from '@/components/common/AppToast';
+import { useAppToast } from '@/hooks/use-app-toast';
 import { categoriesService } from '@/services/categories.service';
-import { Product, productsService } from '@/services/products.service';
+import {
+  Product,
+  productsService,
+  UpdateProductPayload,
+} from '@/services/products.service';
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [categoryId, setCategoryId] = useState('');
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [unit, setUnit] = useState('NOS');
   const [costPrice, setCostPrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const { toast, showToast, closeToast } = useAppToast();
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products'],
@@ -44,14 +54,37 @@ export default function ProductsPage() {
     mutationFn: productsService.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      setOpen(false);
-      setCategoryId('');
-      setName('');
-      setBrand('');
-      setUnit('NOS');
-      setCostPrice('');
-      setSellingPrice('');
+      handleCloseDialog();
+      showToast('Product created successfully', 'success');
     },
+    onError: () => showToast('Failed to create product', 'error'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: UpdateProductPayload;
+    }) => productsService.update(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      handleCloseDialog();
+      showToast('Product updated successfully', 'success');
+    },
+    onError: () => showToast('Failed to update product', 'error'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: productsService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      setDeleteDialogOpen(false);
+      setDeletingProduct(null);
+      showToast('Product deleted successfully', 'success');
+    },
+    onError: () => showToast('Failed to delete product', 'error'),
   });
 
   const columns: GridColDef<Product>[] = [
@@ -66,17 +99,94 @@ export default function ProductsPage() {
     { field: 'unit', headerName: 'Unit', width: 100 },
     { field: 'costPrice', headerName: 'Cost Price', width: 130 },
     { field: 'sellingPrice', headerName: 'Selling Price', width: 150 },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 180,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={1}>
+          <Button size="small" onClick={() => handleEdit(params.row)}>
+            Edit
+          </Button>
+
+          <Button
+            size="small"
+            color="error"
+            onClick={() => handleDeleteClick(params.row)}
+          >
+            Delete
+          </Button>
+        </Stack>
+      ),
+    },
   ];
 
-  const handleCreate = () => {
-    createMutation.mutate({
+  const handleCloseDialog = () => {
+    setOpen(false);
+    setEditingProduct(null);
+    setCategoryId('');
+    setName('');
+    setBrand('');
+    setUnit('NOS');
+    setCostPrice('');
+    setSellingPrice('');
+  };
+
+  const handleOpenCreate = () => {
+    setEditingProduct(null);
+    setCategoryId('');
+    setName('');
+    setBrand('');
+    setUnit('NOS');
+    setCostPrice('');
+    setSellingPrice('');
+    setOpen(true);
+  };
+
+  const handleEdit = (product: Product) => {
+    setEditingProduct(product);
+    setCategoryId(product.categoryId);
+    setName(product.name);
+    setBrand(product.brand ?? '');
+    setUnit(product.unit ?? 'NOS');
+    setCostPrice(String(product.costPrice ?? ''));
+    setSellingPrice(String(product.sellingPrice ?? ''));
+    setOpen(true);
+  };
+
+  const handleDeleteClick = (product: Product) => {
+    setDeletingProduct(product);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deletingProduct) {
+      return;
+    }
+
+    deleteMutation.mutate(deletingProduct.id);
+  };
+
+  const handleSubmit = () => {
+    const payload = {
       categoryId,
       name,
       brand,
       unit,
       costPrice: Number(costPrice),
       sellingPrice: Number(sellingPrice),
-    });
+    };
+
+    if (editingProduct) {
+      updateMutation.mutate({
+        id: editingProduct.id,
+        payload,
+      });
+
+      return;
+    }
+
+    createMutation.mutate(payload);
   };
 
   return (
@@ -91,7 +201,7 @@ export default function ProductsPage() {
       >
         <Typography variant="h5">Products</Typography>
 
-        <Button variant="contained" onClick={() => setOpen(true)}>
+        <Button variant="contained" onClick={handleOpenCreate}>
           Add Product
         </Button>
       </Box>
@@ -106,8 +216,8 @@ export default function ProductsPage() {
         />
       </Box>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Add Product</DialogTitle>
+      <Dialog open={open} onClose={handleCloseDialog} fullWidth maxWidth="sm">
+        <DialogTitle>{editingProduct ? 'Edit Product' : 'Add Product'}</DialogTitle>
 
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
@@ -165,23 +275,52 @@ export default function ProductsPage() {
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
 
           <Button
             variant="contained"
-            onClick={handleCreate}
+            onClick={handleSubmit}
             disabled={
               !categoryId ||
               !name ||
               !costPrice ||
               !sellingPrice ||
-              createMutation.isPending
+              createMutation.isPending ||
+              updateMutation.isPending
             }
           >
-            Save
+            {editingProduct ? 'Update' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete Product</DialogTitle>
+
+        <DialogContent>
+          Are you sure you want to delete {deletingProduct?.name ?? 'this product'}?
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDeleteConfirm}
+            disabled={deleteMutation.isPending}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <AppToast toast={toast} onClose={closeToast} />
     </Box>
   );
 }

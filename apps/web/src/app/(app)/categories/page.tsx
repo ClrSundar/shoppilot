@@ -15,7 +15,13 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { categoriesService, Category } from '@/services/categories.service';
+import { AppToast } from '@/components/common/AppToast';
+import { useAppToast } from '@/hooks/use-app-toast';
+import {
+  categoriesService,
+  Category,
+  UpdateCategoryPayload,
+} from '@/services/categories.service';
 
 export default function CategoriesPage() {
   const queryClient = useQueryClient();
@@ -23,6 +29,10 @@ export default function CategoriesPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const { toast, showToast, closeToast } = useAppToast();
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['categories'],
@@ -33,23 +43,110 @@ export default function CategoriesPage() {
     mutationFn: categoriesService.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
-      setOpen(false);
-      setName('');
-      setDescription('');
+      handleCloseDialog();
+      showToast('Category created successfully', 'success');
     },
+    onError: () => showToast('Failed to create category', 'error'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateCategoryPayload }) =>
+      categoriesService.update(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      handleCloseDialog();
+      showToast('Category updated successfully', 'success');
+    },
+    onError: () => showToast('Failed to update category', 'error'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: categoriesService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      setDeleteDialogOpen(false);
+      setDeletingCategory(null);
+      showToast('Category deleted successfully', 'success');
+    },
+    onError: () => showToast('Failed to delete category', 'error'),
   });
 
   const columns: GridColDef<Category>[] = [
     { field: 'name', headerName: 'Name', flex: 1 },
     { field: 'description', headerName: 'Description', flex: 1 },
     { field: 'active', headerName: 'Active', width: 120 },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 180,
+      renderCell: (params) => (
+        <Stack direction="row" spacing={1}>
+          <Button size="small" onClick={() => handleEdit(params.row)}>
+            Edit
+          </Button>
+
+          <Button
+            size="small"
+            color="error"
+            onClick={() => handleDeleteClick(params.row)}
+          >
+            Delete
+          </Button>
+        </Stack>
+      ),
+    },
   ];
 
-  const handleCreate = () => {
-    createMutation.mutate({
+  const handleCloseDialog = () => {
+    setOpen(false);
+    setEditingCategory(null);
+    setName('');
+    setDescription('');
+  };
+
+  const handleOpenCreate = () => {
+    setEditingCategory(null);
+    setName('');
+    setDescription('');
+    setOpen(true);
+  };
+
+  const handleEdit = (category: Category) => {
+    setEditingCategory(category);
+    setName(category.name);
+    setDescription(category.description ?? '');
+    setOpen(true);
+  };
+
+  const handleDeleteClick = (category: Category) => {
+    setDeletingCategory(category);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deletingCategory) {
+      return;
+    }
+
+    deleteMutation.mutate(deletingCategory.id);
+  };
+
+  const handleSubmit = () => {
+    const payload = {
       name,
       description,
-    });
+    };
+
+    if (editingCategory) {
+      updateMutation.mutate({
+        id: editingCategory.id,
+        payload,
+      });
+
+      return;
+    }
+
+    createMutation.mutate(payload);
   };
 
   return (
@@ -64,7 +161,7 @@ export default function CategoriesPage() {
       >
         <Typography variant="h5">Categories</Typography>
 
-        <Button variant="contained" onClick={() => setOpen(true)}>
+        <Button variant="contained" onClick={handleOpenCreate}>
           Add Category
         </Button>
       </Stack>
@@ -79,8 +176,8 @@ export default function CategoriesPage() {
         />
       </Box>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Add Category</DialogTitle>
+      <Dialog open={open} onClose={handleCloseDialog} fullWidth maxWidth="sm">
+        <DialogTitle>{editingCategory ? 'Edit Category' : 'Add Category'}</DialogTitle>
 
         <DialogContent>
           <Stack
@@ -104,17 +201,45 @@ export default function CategoriesPage() {
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
 
           <Button
             variant="contained"
-            onClick={handleCreate}
-            disabled={!name || createMutation.isPending}
+            onClick={handleSubmit}
+            disabled={!name || createMutation.isPending || updateMutation.isPending}
           >
-            Save
+            {editingCategory ? 'Update' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete Category</DialogTitle>
+
+        <DialogContent>
+          Are you sure you want to delete {deletingCategory?.name ?? 'this category'}?
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleDeleteConfirm}
+            disabled={deleteMutation.isPending}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <AppToast toast={toast} onClose={closeToast} />
     </Box>
   );
 }

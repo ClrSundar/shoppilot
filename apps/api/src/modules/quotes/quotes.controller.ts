@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { CreateQuoteDto } from './dto/create-quote.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/types/jwt-payload.type';
 import { UpdateQuoteStatusDto } from './dto/update-quote-status.dto';
+import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { PdfService } from '../pdf/pdf.service';
 
 @ApiTags('Quotes')
@@ -83,5 +85,14 @@ export class QuotesController {
     @Body() dto: UpdateQuoteStatusDto,
   ) {
     return this.quotesService.updateStatus(user.tenantId, id, dto.status);
+  }
+
+  @Put(':id')
+  update(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: UpdateQuoteDto,
+  ) {
+    return this.quotesService.update(user.tenantId, id, dto);
   }
 }

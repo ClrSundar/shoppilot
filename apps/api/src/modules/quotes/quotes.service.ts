@@ -3,11 +3,61 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 import { CreateQuoteDto } from './dto/create-quote.dto';
+import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteStatus } from '@prisma/client';
 
 @Injectable()
 export class QuotesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async buildQuoteItems(
+    tenantId: string,
+    items: CreateQuoteDto['items'],
+  ) {
+    let subtotal = 0;
+
+    const quoteItems: Array<{
+      productId: string;
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      lineTotal: number;
+    }> = [];
+
+    for (const item of items) {
+      const product = await this.prisma.product.findFirst({
+        where: {
+          id: item.productId,
+          tenantId,
+        },
+      });
+
+      if (!product) {
+        throw new BadRequestException(`Product not found: ${item.productId}`);
+      }
+
+      const unitPrice = Number(product.sellingPrice);
+
+      const lineTotal = unitPrice * item.quantity;
+
+      subtotal += lineTotal;
+
+      quoteItems.push({
+        productId: product.id,
+        productName: product.name,
+        quantity: item.quantity,
+        unitPrice,
+        lineTotal,
+      });
+    }
+
+    return {
+      quoteItems,
+      subtotal,
+      taxAmount: 0,
+      totalAmount: subtotal,
+    };
+  }
 
   private async generateQuoteNumber(tenantId: string) {
     const count = await this.prisma.quote.count({
@@ -31,43 +81,8 @@ export class QuotesService {
 
     const quoteNumber = await this.generateQuoteNumber(tenantId);
 
-    let subtotal = 0;
-
-    const quoteItems: any[] = [];
-
-    for (const item of dto.items) {
-      const product = await this.prisma.product.findFirst({
-        where: {
-          id: item.productId,
-          tenantId,
-        },
-      });
-
-      if (!product) {
-        throw new BadRequestException(`Product not found: ${item.productId}`);
-      }
-
-      const unitPrice = Number(product.sellingPrice);
-
-      const lineTotal = unitPrice * item.quantity;
-
-      subtotal += lineTotal;
-
-      quoteItems.push({
-        productId: product.id,
-        productName: product.name,
-
-        quantity: item.quantity,
-
-        unitPrice,
-
-        lineTotal,
-      });
-    }
-
-    const taxAmount = 0;
-
-    const totalAmount = subtotal + taxAmount;
+    const { quoteItems, subtotal, taxAmount, totalAmount } =
+      await this.buildQuoteItems(tenantId, dto.items);
 
     return this.prisma.quote.create({
       data: {
@@ -139,6 +154,58 @@ export class QuotesService {
       },
       data: {
         status,
+      },
+      include: {
+        customer: true,
+        items: true,
+      },
+    });
+  }
+
+  async update(tenantId: string, quoteId: string, dto: UpdateQuoteDto) {
+    const quote = await this.prisma.quote.findFirst({
+      where: {
+        id: quoteId,
+        tenantId,
+      },
+    });
+
+    if (!quote) {
+      throw new BadRequestException('Quote not found');
+    }
+
+    if (quote.status !== QuoteStatus.DRAFT) {
+      throw new BadRequestException('Only draft quotes can be edited');
+    }
+
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        id: dto.customerId,
+        tenantId,
+      },
+    });
+
+    if (!customer) {
+      throw new BadRequestException('Customer not found');
+    }
+
+    const { quoteItems, subtotal, taxAmount, totalAmount } =
+      await this.buildQuoteItems(tenantId, dto.items);
+
+    return this.prisma.quote.update({
+      where: {
+        id: quoteId,
+      },
+      data: {
+        customerId: dto.customerId,
+        notes: dto.notes,
+        subtotal,
+        taxAmount,
+        totalAmount,
+        items: {
+          deleteMany: {},
+          create: quoteItems,
+        },
       },
       include: {
         customer: true,
