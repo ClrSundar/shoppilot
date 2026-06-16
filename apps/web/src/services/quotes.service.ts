@@ -50,6 +50,25 @@ export const quotesService = {
     const res = await api.patch<Quote>(`/quotes/${id}/status`, { status });
     return res.data;
   },
+
+  downloadPdf: async (id: string) => {
+    const res = await api.get(`/quotes/${id}/pdf`, {
+      responseType: 'blob',
+    });
+
+    const blob = new Blob([res.data], {
+      type: 'application/pdf',
+    });
+
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `quote-${id}.pdf`;
+    link.click();
+
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 export type CreateQuotePayload = {

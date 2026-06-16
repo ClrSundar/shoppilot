@@ -255,12 +255,7 @@ export default function QuotesPage() {
 
               <Button
                 variant="contained"
-                onClick={() =>
-                  window.open(
-                    `${process.env.NEXT_PUBLIC_API_URL}/quotes/${selectedQuote.id}/pdf`,
-                    '_blank',
-                  )
-                }
+                onClick={() => quotesService.downloadPdf(selectedQuote.id)}
               >
                 Download PDF
               </Button>
