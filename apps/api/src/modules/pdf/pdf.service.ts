@@ -5,9 +5,9 @@ type QuotePdfData = {
   quoteNumber: string;
   status: string;
   createdAt: Date;
-  subtotal: unknown;
-  taxAmount: unknown;
-  totalAmount: unknown;
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
   customer: {
     name: string;
     phone?: string | null;
@@ -20,15 +20,15 @@ type QuotePdfData = {
   };
   items: {
     productName: string;
-    quantity: unknown;
-    unitPrice: unknown;
-    lineTotal: unknown;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
   }[];
 };
 
 @Injectable()
 export class PdfService {
-  generateQuotePdf(quote: QuotePdfData): PDFDocument {
+  generateQuotePdf(quote: QuotePdfData): PDFKit.PDFDocument {
     const doc = new PDFDocument({
       size: 'A4',
       margin: 50,
@@ -84,9 +84,15 @@ export class PdfService {
     y += 20;
 
     doc.fontSize(11);
-    doc.text(`Subtotal: ₹${quote.subtotal}`, 360, y, { width: 180, align: 'right' });
+    doc.text(`Subtotal: ₹${quote.subtotal}`, 360, y, {
+      width: 180,
+      align: 'right',
+    });
     y += 20;
-    doc.text(`Tax: ₹${quote.taxAmount}`, 360, y, { width: 180, align: 'right' });
+    doc.text(`Tax: ₹${quote.taxAmount}`, 360, y, {
+      width: 180,
+      align: 'right',
+    });
     y += 20;
     doc.fontSize(14).text(`Total: ₹${quote.totalAmount}`, 360, y, {
       width: 180,
