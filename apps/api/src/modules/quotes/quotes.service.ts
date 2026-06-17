@@ -195,7 +195,7 @@ export class QuotesService {
     });
 
     if (!customer) {
-      throw new BadRequestException('Customer not found');
+      throw new BadRequestException('Customer not found.');
     }
 
     const { quoteItems, subtotal, taxAmount, totalAmount } =
