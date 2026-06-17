@@ -11,13 +11,19 @@ export function ProtectedRoute({
 }) {
   const router = useRouter();
   const token = useAuthStore((state) => state.token);
+  const isHydrated = useAuthStore((state) => state.isHydrated);
 
   useEffect(() => {
-    if (!token) {
+    // Only check auth after store has hydrated from localStorage
+    if (isHydrated && !token) {
       router.replace('/login');
     }
-  }, [token, router]);
+  }, [token, isHydrated, router]);
 
+  // Don't render anything until hydration is complete
+  if (!isHydrated) return null;
+
+  // Don't render children if no token
   if (!token) return null;
 
   return <>{children}</>;
