@@ -21,7 +21,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const existingTenant = await this.prisma.tenant.findUnique({
+    const existingTenant = await this.prisma.tenant.findFirst({
       where: {
         code: dto.shopCode,
       },
@@ -56,7 +56,7 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     // Find user by email (now globally unique)
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: {
         email: dto.email,
       },
