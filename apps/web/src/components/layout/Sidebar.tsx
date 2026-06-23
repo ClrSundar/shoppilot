@@ -19,6 +19,7 @@ export function Sidebar() {
         <li><Link href="/products">Products</Link></li>
         <li><Link href="/customers">Customers</Link></li>
         <li><Link href="/quotes">Quotes</Link></li>
+        <li><Link href="/team">Team</Link></li>
       </ul>
     </div>
   );
