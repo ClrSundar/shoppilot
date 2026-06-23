@@ -19,6 +19,12 @@ model Tenant {
   phone        String?
 
   active       Boolean       @default(true)
+  status       TenantStatus  @default(PENDING)
+
+  rejectedReason String?
+
+  approvedById   String?
+  approvedAt     DateTime?
 
   users        User[]
   categories   ProductCategory[]
@@ -29,6 +35,21 @@ model Tenant {
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+}
+
+model PlatformAdmin {
+  id        String            @id @default(uuid())
+
+  name      String
+  email     String            @unique
+  password  String
+
+  role      PlatformAdminRole @default(SUPPORT_ADMIN)
+
+  active    Boolean           @default(true)
+
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 }
 
 model User {
@@ -59,6 +80,18 @@ enum UserRole {
   MANAGER
   SALES
   TECHNICIAN
+}
+
+enum TenantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum PlatformAdminRole {
+  SUPER_ADMIN
+  SUPPORT_ADMIN
 }
 
 enum BusinessType {

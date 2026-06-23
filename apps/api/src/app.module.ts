@@ -10,6 +10,8 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
+import { PlatformAuthModule } from './modules/platform-auth/platform-auth.module';
+import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
     QuotesModule,
     DashboardModule,
     WhatsappModule,
+    PlatformAuthModule,
+    PlatformModule,
   ],
 })
 export class AppModule {}

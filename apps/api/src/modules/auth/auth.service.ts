@@ -2,10 +2,11 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
-import { BusinessType, UserRole } from '@prisma/client';
+import { BusinessType, UserRole, TenantStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -22,9 +23,7 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     const existingTenant = await this.prisma.tenant.findFirst({
-      where: {
-        code: dto.shopCode,
-      },
+      where: { code: dto.shopCode },
     });
 
     if (existingTenant) {
@@ -38,10 +37,11 @@ export class AuthService {
         name: dto.shopName,
         code: dto.shopCode,
         businessType: dto.businessType,
+        status: TenantStatus.PENDING,
       },
     });
 
-    const user = await this.prisma.user.create({
+    await this.prisma.user.create({
       data: {
         tenantId: tenant.id,
         name: dto.ownerName,
@@ -51,15 +51,16 @@ export class AuthService {
       },
     });
 
-    return this.generateToken(user);
+    return {
+      message: 'Registration successful. Your account is pending approval by an administrator.',
+      tenantStatus: TenantStatus.PENDING,
+    };
   }
 
   async login(dto: LoginDto) {
-    // Find user by email (now globally unique)
     const user = await this.prisma.user.findFirst({
-      where: {
-        email: dto.email,
-      },
+      where: { email: dto.email },
+      include: { tenant: true },
     });
 
     if (!user || !user.active) {
@@ -67,9 +68,20 @@ export class AuthService {
     }
 
     const validPassword = await bcrypt.compare(dto.password, user.password);
-
     if (!validPassword) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.tenant.status === TenantStatus.PENDING) {
+      throw new ForbiddenException('Your account is pending approval. Please wait for an administrator to approve your registration.');
+    }
+
+    if (user.tenant.status === TenantStatus.SUSPENDED) {
+      throw new ForbiddenException('Your account has been suspended. Please contact support.');
+    }
+
+    if (user.tenant.status === TenantStatus.CANCELLED) {
+      throw new ForbiddenException('Your account has been cancelled.');
     }
 
     return this.generateToken(user);
