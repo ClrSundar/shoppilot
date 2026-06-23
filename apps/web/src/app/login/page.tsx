@@ -30,15 +30,20 @@ export default function LoginPage() {
       setError('');
       setLoading(true);
 
-      const response = await authService.login({
-        email,
-        password,
-      });
-
+      const response = await authService.login({ email, password });
       setToken(response.accessToken);
       router.push('/dashboard');
-    } catch (err) {
-      setError('Invalid email or password');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      if (msg?.includes('pending approval')) {
+        setError('Your account is pending approval. Please wait for an administrator to activate it.');
+      } else if (msg?.includes('suspended')) {
+        setError('Your account has been suspended. Please contact support.');
+      } else if (msg?.includes('cancelled')) {
+        setError('Your account has been cancelled.');
+      } else {
+        setError('Invalid email or password');
+      }
     } finally {
       setLoading(false);
     }

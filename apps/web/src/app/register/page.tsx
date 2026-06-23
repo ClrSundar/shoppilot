@@ -15,7 +15,6 @@ import {
 } from '@mui/material';
 
 import { authService } from '@/services/auth.service';
-import { useAuthStore } from '@/store/auth.store';
 
 type BusinessType =
   | 'ELECTRICAL'
@@ -25,7 +24,6 @@ type BusinessType =
 
 export default function RegisterPage() {
   const router = useRouter();
-  const setToken = useAuthStore((state) => state.setToken);
 
   const [shopName, setShopName] = useState('');
   const [shopCode, setShopCode] = useState('');
@@ -36,12 +34,13 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
 
   const [error, setError] = useState('');
+  const [registered, setRegistered] = useState(false);
 
   const handleRegister = async () => {
     try {
       setError('');
 
-      const res = await authService.register({
+      await authService.register({
         shopName,
         shopCode,
         businessType,
@@ -50,8 +49,7 @@ export default function RegisterPage() {
         password,
       });
 
-      setToken(res.accessToken);
-      router.push('/dashboard');
+      setRegistered(true);
     } catch {
       setError('Registration failed. Shop code or email may already exist.');
     }
@@ -109,104 +107,69 @@ export default function RegisterPage() {
           }}
         >
           <CardContent sx={{ p: 4 }}>
-            <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-              Register your shop
-            </Typography>
-
-            <Typography color="text.secondary" sx={{ mb: 3 }}>
-              Create your ShopPilot workspace
-            </Typography>
-
-            <Stack spacing={2}>
-              {error && <Alert severity="error">{error}</Alert>}
-
-              <TextField
-                label="Shop Name"
-                value={shopName}
-                onChange={(e) => setShopName(e.target.value)}
-                fullWidth
-              />
-
-              <TextField
-                label="Shop Code"
-                value={shopCode}
-                onChange={(e) =>
-                  setShopCode(
-                    e.target.value
-                      .toLowerCase()
-                      .replace(/\s+/g, '-'),
-                  )
-                }
-                helperText="Example: sundar-electricals"
-                fullWidth
-              />
-
-              <TextField
-                select
-                label="Business Type"
-                value={businessType}
-                onChange={(e) =>
-                  setBusinessType(e.target.value as BusinessType)
-                }
-                fullWidth
-              >
-                <MenuItem value="ELECTRICAL">Electrical</MenuItem>
-                <MenuItem value="PLUMBING">Plumbing</MenuItem>
-                <MenuItem value="MOTOR">Motor</MenuItem>
-                <MenuItem value="GENERAL">General</MenuItem>
-              </TextField>
-
-              <TextField
-                label="Owner Name"
-                value={ownerName}
-                onChange={(e) => setOwnerName(e.target.value)}
-                fullWidth
-              />
-
-              <TextField
-                label="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                fullWidth
-              />
-
-              <TextField
-                label="Password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                helperText="Minimum 8 characters"
-                fullWidth
-              />
-
-              <Button
-                variant="contained"
-                size="large"
-                onClick={handleRegister}
-                disabled={
-                  !shopName ||
-                  !shopCode ||
-                  !ownerName ||
-                  !email ||
-                  password.length < 8
-                }
-                sx={{
-                  py: 1.3,
-                  borderRadius: 2,
-                  textTransform: 'none',
-                  fontWeight: 700,
-                }}
-              >
-                Register Shop
-              </Button>
-
-              <Button
-                onClick={() => router.push('/login')}
-                sx={{ textTransform: 'none' }}
-              >
-                Already have an account? Login
-              </Button>
-            </Stack>
+            {registered ? (
+              <Stack spacing={3} sx={{ textAlign: 'center', py: 2 }}>
+                <Typography variant="h2" sx={{ fontSize: '3rem' }}>🎉</Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  Registration Successful!
+                </Typography>
+                <Alert severity="info">
+                  Your shop has been registered and is <strong>pending approval</strong>.
+                  An administrator will review and activate your account shortly.
+                </Alert>
+                <Typography color="text.secondary" variant="body2">
+                  You will be able to login once your account is approved.
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => router.push('/login')}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Back to Login
+                </Button>
+              </Stack>
+            ) : (
+              <>
+                <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
+                  Register your shop
+                </Typography>
+                <Typography color="text.secondary" sx={{ mb: 3 }}>
+                  Create your ShopPilot workspace
+                </Typography>
+                <Stack spacing={2}>
+                  {error && <Alert severity="error">{error}</Alert>}
+                  <TextField label="Shop Name" value={shopName} onChange={(e) => setShopName(e.target.value)} fullWidth />
+                  <TextField
+                    label="Shop Code"
+                    value={shopCode}
+                    onChange={(e) => setShopCode(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                    helperText="Example: sundar-electricals"
+                    fullWidth
+                  />
+                  <TextField select label="Business Type" value={businessType} onChange={(e) => setBusinessType(e.target.value as BusinessType)} fullWidth>
+                    <MenuItem value="ELECTRICAL">Electrical</MenuItem>
+                    <MenuItem value="PLUMBING">Plumbing</MenuItem>
+                    <MenuItem value="MOTOR">Motor</MenuItem>
+                    <MenuItem value="GENERAL">General</MenuItem>
+                  </TextField>
+                  <TextField label="Owner Name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} fullWidth />
+                  <TextField label="Email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth />
+                  <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} helperText="Minimum 8 characters" fullWidth />
+                  <Button
+                    variant="contained"
+                    size="large"
+                    onClick={handleRegister}
+                    disabled={!shopName || !shopCode || !ownerName || !email || password.length < 8}
+                    sx={{ py: 1.3, borderRadius: 2, textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Register Shop
+                  </Button>
+                  <Button onClick={() => router.push('/login')} sx={{ textTransform: 'none' }}>
+                    Already have an account? Login
+                  </Button>
+                </Stack>
+              </>
+            )}
           </CardContent>
         </Card>
       </Box>
