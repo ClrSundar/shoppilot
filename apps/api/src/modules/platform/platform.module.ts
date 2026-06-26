@@ -3,6 +3,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { PlatformController } from './platform.controller';
 import { PlatformService } from './platform.service';
+import { FeatureService } from './feature.service';
+import { PlanSeedService } from './plan-seed.service';
+import { SubscriptionService } from './subscription.service';
 
 @Module({
   imports: [
@@ -13,6 +16,7 @@ import { PlatformService } from './platform.service';
     }),
   ],
   controllers: [PlatformController],
-  providers: [PlatformService],
+  providers: [PlatformService, FeatureService, PlanSeedService, SubscriptionService],
+  exports: [FeatureService, SubscriptionService],
 })
 export class PlatformModule {}

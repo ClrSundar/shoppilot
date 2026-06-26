@@ -4,6 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { PrismaService } from './common/prisma/prisma.service';
+import { PlanSeedService } from './modules/platform/plan-seed.service';
 import * as bcrypt from 'bcryptjs';
 import { PlatformAdminRole } from '@prisma/client';
 
@@ -33,7 +34,15 @@ async function seedSuperAdmin(prisma: PrismaService) {
     },
   });
 
-  console.log(`Super admin created: ${email}`);
+  console.log(`✓ Super admin created: ${email}`);
+}
+
+async function seedPlans(planSeedService: PlanSeedService) {
+  try {
+    await planSeedService.seedPlans();
+  } catch (error) {
+    console.error('Error seeding plans:', error);
+  }
 }
 
 async function bootstrap() {
@@ -77,9 +86,12 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
-  // Seed super admin after app starts
+  // Seed super admin and plans after app starts
   const prisma = app.get(PrismaService);
+  const planSeedService = app.get(PlanSeedService);
+  
   await seedSuperAdmin(prisma);
+  await seedPlans(planSeedService);
 
   console.log(`Application is running on port: ${port}`);
 }

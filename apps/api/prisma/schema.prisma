@@ -32,6 +32,9 @@ model Tenant {
   customers    Customer[]
   quotes       Quote[]
   whatsappConversations WhatsAppConversation[]
+  subscription  Subscription?
+  featureOverrides TenantFeatureOverride[]
+  usageCounters UsageCounter[]
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -51,7 +54,125 @@ model PlatformAdmin {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 }
+model Plan {
+  id                String          @id @default(uuid())
+  code              String          @unique
+  name              String
+  description       String?
+  isActive          Boolean         @default(true)
+  
+  billingCycle      BillingCycle    @default(MONTHLY)
+  priceAmount       Decimal         @db.Decimal(10,2)
+  currency          String          @default("USD")
+  trialDays         Int             @default(0)
+  
+  features          PlanFeature[]
+  subscriptions     Subscription[]
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([isActive])
+}
 
+model FeatureFlag {
+  id                String          @id @default(uuid())
+  code              String          @unique
+  name              String
+  description       String?
+  isActive          Boolean         @default(true)
+  
+  planFeatures      PlanFeature[]
+  overrides         TenantFeatureOverride[]
+  usageCounters     UsageCounter[]
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model PlanFeature {
+  id                String          @id @default(uuid())
+  
+  planId            String
+  plan              Plan            @relation(fields: [planId], references: [id])
+  
+  featureFlagId     String
+  featureFlag       FeatureFlag     @relation(fields: [featureFlagId], references: [id])
+  
+  enabled           Boolean         @default(true)
+  limitValue        Int?
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@unique([planId, featureFlagId])
+  @@index([planId])
+  @@index([featureFlagId])
+}
+
+model Subscription {
+  id                String          @id @default(uuid())
+  
+  tenantId          String          @unique
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  
+  planId            String
+  plan              Plan            @relation(fields: [planId], references: [id])
+  
+  status            SubscriptionStatus @default(ACTIVE)
+  startAt           DateTime
+  endAt             DateTime?
+  trialEndAt        DateTime?
+  cancelAtPeriodEnd Boolean         @default(false)
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([tenantId])
+  @@index([planId])
+  @@index([status])
+}
+
+model TenantFeatureOverride {
+  id                String          @id @default(uuid())
+  
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  
+  featureFlagId     String
+  featureFlag       FeatureFlag     @relation(fields: [featureFlagId], references: [id])
+  
+  enabled           Boolean
+  limitValue        Int?
+  reason            String?
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@unique([tenantId, featureFlagId])
+  @@index([tenantId])
+  @@index([featureFlagId])
+}
+
+model UsageCounter {
+  id                String          @id @default(uuid())
+  
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  
+  featureFlagId     String
+  featureFlag       FeatureFlag     @relation(fields: [featureFlagId], references: [id])
+  
+  periodKey         String
+  usedCount         Int             @default(0)
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@unique([tenantId, featureFlagId, periodKey])
+  @@index([tenantId])
+  @@index([periodKey])
+}
 model User {
   id        String   @id @default(uuid())
 
@@ -99,6 +220,18 @@ enum BusinessType {
   PLUMBING
   MOTOR
   GENERAL
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
 }
 
 model ProductCategory {

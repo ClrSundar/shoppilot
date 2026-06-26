@@ -51,6 +51,22 @@ export class AuthService {
       },
     });
 
+    // Assign FREE plan subscription
+    const freePlan = await this.prisma.plan.findUnique({
+      where: { code: 'FREE' },
+    });
+
+    if (freePlan) {
+      await this.prisma.subscription.create({
+        data: {
+          tenantId: tenant.id,
+          planId: freePlan.id,
+          startAt: new Date(),
+          status: 'ACTIVE',
+        },
+      });
+    }
+
     return {
       message: 'Registration successful. Your account is pending approval by an administrator.',
       tenantStatus: TenantStatus.PENDING,
