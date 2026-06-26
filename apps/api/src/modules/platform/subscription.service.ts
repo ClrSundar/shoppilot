@@ -9,7 +9,7 @@ export class SubscriptionService {
    * Get tenant's current subscription
    */
   async getSubscription(tenantId: string) {
-    const subscription = await this.prisma.subscription.findUnique({
+    let subscription = await this.prisma.subscription.findUnique({
       where: { tenantId },
       include: {
         plan: {
@@ -23,24 +23,63 @@ export class SubscriptionService {
     });
 
     if (!subscription) {
-      throw new BadRequestException('Subscription not found');
+      // Auto-assign FREE plan for tenants created before subscription system
+      subscription = await this.assignFreePlan(tenantId);
     }
 
     return subscription;
   }
 
   /**
+   * Assign FREE plan to a tenant (used for new registrations and backfill)
+   */
+  async assignFreePlan(tenantId: string) {
+    const freePlan = await this.prisma.plan.findUnique({ where: { code: 'FREE' } });
+    if (!freePlan) {
+      throw new BadRequestException('FREE plan not found — ensure seed has run');
+    }
+
+    return this.prisma.subscription.upsert({
+      where: { tenantId },
+      create: {
+        tenantId,
+        planId: freePlan.id,
+        status: 'ACTIVE',
+        startAt: new Date(),
+      },
+      update: {},
+      include: {
+        plan: {
+          include: {
+            features: {
+              include: { featureFlag: true },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  /**
    * Upgrade or downgrade tenant plan
    */
   async changePlan(tenantId: string, planCode: string) {
-    const currentSubscription = await this.prisma.subscription.findUnique({
+    let currentSubscription = await this.prisma.subscription.findUnique({
       where: { tenantId },
       include: { plan: true },
     });
 
     if (!currentSubscription) {
-      throw new BadRequestException('Current subscription not found');
+      // Backfill: assign FREE plan first, then allow the change
+      await this.assignFreePlan(tenantId);
+      currentSubscription = await this.prisma.subscription.findUnique({
+        where: { tenantId },
+        include: { plan: true },
+      });
     }
+
+    // At this point subscription is guaranteed to exist
+    const sub = currentSubscription!;
 
     const newPlan = await this.prisma.plan.findUnique({
       where: { code: planCode },
@@ -50,7 +89,7 @@ export class SubscriptionService {
       throw new BadRequestException('Plan not found');
     }
 
-    if (currentSubscription.planId === newPlan.id) {
+    if (sub.planId === newPlan.id) {
       throw new BadRequestException('Already on this plan');
     }
 
@@ -73,7 +112,7 @@ export class SubscriptionService {
     });
 
     return {
-      message: `Plan changed from ${currentSubscription.plan.name} to ${newPlan.name}`,
+      message: `Plan changed from ${sub.plan.name} to ${newPlan.name}`,
       subscription: updated,
     };
   }
