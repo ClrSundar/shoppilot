@@ -14,6 +14,7 @@ import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequireFeature } from '../../common/guards/feature.guard';
 
 import { QuotesService } from './quotes.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
@@ -44,6 +45,7 @@ export class QuotesController {
   }
 
   @Get(':id/pdf')
+  @RequireFeature('PDF_EXPORT')
   async downloadPdf(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,

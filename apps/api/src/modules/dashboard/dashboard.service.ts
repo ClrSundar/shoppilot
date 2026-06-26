@@ -20,4 +20,35 @@ export class DashboardService {
       quotes,
     };
   }
+
+  async getOverview(tenantId: string) {
+    const [metrics, subscription, users] = await Promise.all([
+      this.getMetrics(tenantId),
+      this.prisma.subscription.findUnique({
+        where: { tenantId },
+        include: { plan: true },
+      }),
+      this.prisma.user.count({ where: { tenantId, active: true } }),
+    ]);
+
+    return {
+      metrics,
+      subscription: subscription
+        ? {
+            id: subscription.id,
+            status: subscription.status,
+            plan: {
+              code: subscription.plan.code,
+              name: subscription.plan.name,
+              priceAmount: subscription.plan.priceAmount,
+            },
+            startAt: subscription.startAt,
+            endAt: subscription.endAt,
+            trialEndAt: subscription.trialEndAt,
+          }
+        : null,
+      activeUsers: users,
+    };
+  }
 }
+

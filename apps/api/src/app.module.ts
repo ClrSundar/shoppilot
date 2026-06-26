@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
@@ -12,6 +13,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { PlatformAuthModule } from './modules/platform-auth/platform-auth.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { FeatureGuard } from './common/guards/feature.guard';
 
 @Module({
   imports: [
@@ -30,6 +32,12 @@ import { PlatformModule } from './modules/platform/platform.module';
     WhatsappModule,
     PlatformAuthModule,
     PlatformModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: FeatureGuard,
+    },
   ],
 })
 export class AppModule {}

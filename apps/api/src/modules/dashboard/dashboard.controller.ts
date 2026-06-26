@@ -17,4 +17,9 @@ export class DashboardController {
   getMetrics(@CurrentUser() user: JwtPayload) {
     return this.dashboardService.getMetrics(user.tenantId);
   }
+
+  @Get('overview')
+  getOverview(@CurrentUser() user: JwtPayload) {
+    return this.dashboardService.getOverview(user.tenantId);
+  }
 }
