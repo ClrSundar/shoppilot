@@ -20,6 +20,7 @@ export function Sidebar() {
         <li><Link href="/customers">Customers</Link></li>
         <li><Link href="/quotes">Quotes</Link></li>
         <li><Link href="/team">Team</Link></li>
+        <li><Link href="/billing">Billing</Link></li>
       </ul>
     </div>
   );
