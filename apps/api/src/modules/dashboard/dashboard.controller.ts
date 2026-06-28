@@ -22,4 +22,9 @@ export class DashboardController {
   getOverview(@CurrentUser() user: JwtPayload) {
     return this.dashboardService.getOverview(user.tenantId);
   }
+
+  @Get('low-stock')
+  getLowStockProducts(@CurrentUser() user: JwtPayload) {
+    return this.dashboardService.getLowStockProducts(user.tenantId);
+  }
 }

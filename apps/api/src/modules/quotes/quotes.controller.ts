@@ -86,7 +86,7 @@ export class QuotesController {
     @Param('id') id: string,
     @Body() dto: UpdateQuoteStatusDto,
   ) {
-    return this.quotesService.updateStatus(user.tenantId, id, dto.status);
+    return this.quotesService.updateStatus(user.tenantId, user.sub, id, dto.status);
   }
 
   @Put(':id')

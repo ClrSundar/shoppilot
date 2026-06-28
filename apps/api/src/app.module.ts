@@ -14,6 +14,7 @@ import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { PlatformAuthModule } from './modules/platform-auth/platform-auth.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { FeatureGuard } from './common/guards/feature.guard';
+import { InventoryModule } from './modules/inventory/inventory.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { FeatureGuard } from './common/guards/feature.guard';
     WhatsappModule,
     PlatformAuthModule,
     PlatformModule,
+    InventoryModule,
   ],
   providers: [
     {

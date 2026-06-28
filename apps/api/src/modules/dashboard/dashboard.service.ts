@@ -21,6 +21,42 @@ export class DashboardService {
     };
   }
 
+  async getLowStockProducts(tenantId: string, limit: number = 10) {
+    const lowStockItems = await this.prisma.inventoryStock.findMany({
+      where: {
+        tenantId,
+        active: true,
+      },
+      include: {
+        product: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        onHand: 'asc',
+      },
+    });
+
+    // Filter for items at or below reorder level
+    return lowStockItems
+      .filter((item) => Number(item.onHand) <= Number(item.reorderLevel))
+      .slice(0, limit)
+      .map((item) => ({
+        id: item.id,
+        productId: item.product.id,
+        productName: item.product.name,
+        sku: item.product.sku,
+        categoryName: item.product.category?.name,
+        onHand: Number(item.onHand),
+        reorderLevel: Number(item.reorderLevel),
+        reserved: Number(item.reserved),
+        available: Number(item.onHand) - Number(item.reserved),
+        status: Number(item.onHand) === 0 ? 'OUT_OF_STOCK' : 'LOW_STOCK',
+      }));
+  }
+
   async getOverview(tenantId: string) {
     const [metrics, subscription, users] = await Promise.all([
       this.getMetrics(tenantId),

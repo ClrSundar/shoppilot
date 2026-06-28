@@ -12,8 +12,11 @@ import {
   Grid,
   Stack,
   Typography,
+  Alert,
+  AlertTitle,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
+import { WarningAmber } from '@mui/icons-material';
 
 import { dashboardService } from '@/services/dashboard.service';
 
@@ -52,7 +55,7 @@ const quickActions = [
   { label: 'Add Product', href: '/products' },
   { label: 'Add Customer', href: '/customers' },
   { label: 'Create Quote', href: '/quotes' },
-  { label: 'Manage Categories', href: '/categories' },
+  { label: 'Check Inventory', href: '/inventory' },
 ];
 
 export default function Dashboard() {
@@ -61,6 +64,11 @@ export default function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-metrics'],
     queryFn: dashboardService.getMetrics,
+  });
+
+  const { data: lowStockProducts = [] } = useQuery({
+    queryKey: ['dashboard-low-stock'],
+    queryFn: dashboardService.getLowStockProducts,
   });
 
   return (
@@ -140,6 +148,43 @@ export default function Dashboard() {
           </Grid>
         </CardContent>
       </Card>
+
+      {lowStockProducts.length > 0 && (
+        <Alert
+          severity={
+            lowStockProducts.some((p) => p.status === 'OUT_OF_STOCK')
+              ? 'error'
+              : 'warning'
+          }
+          icon={<WarningAmber />}
+          sx={{ mb: 3, borderRadius: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => router.push('/inventory')}
+            >
+              View Inventory
+            </Button>
+          }
+        >
+          <AlertTitle>
+            {lowStockProducts.filter((p) => p.status === 'OUT_OF_STOCK').length > 0
+              ? 'Out of Stock Alert!'
+              : 'Low Stock Alert'}
+          </AlertTitle>
+          <Stack spacing={0.5}>
+            {lowStockProducts.map((product) => (
+              <Typography key={product.id} variant="body2">
+                {product.status === 'OUT_OF_STOCK' ? '🔴' : '🟡'} {product.productName}
+                {product.sku && ` (${product.sku})`} — On hand: {product.onHand}/{
+                  product.reorderLevel
+                }
+              </Typography>
+            ))}
+          </Stack>
+        </Alert>
+      )}
 
       <Typography variant="h5" sx={{ mb: 2 }}>
         Business Modules

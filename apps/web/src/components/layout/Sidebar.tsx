@@ -17,6 +17,7 @@ export function Sidebar() {
         <li><Link href="/dashboard">Dashboard</Link></li>
         <li><Link href="/categories">Categories</Link></li>
         <li><Link href="/products">Products</Link></li>
+        <li><Link href="/inventory">Inventory</Link></li>
         <li><Link href="/customers">Customers</Link></li>
         <li><Link href="/quotes">Quotes</Link></li>
         <li><Link href="/team">Team</Link></li>

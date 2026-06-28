@@ -38,6 +38,11 @@ export class PlanSeedService {
         name: 'Custom Branding',
         description: 'White-label shop name and logo',
       },
+      {
+        code: 'INVENTORY_MANAGEMENT',
+        name: 'Inventory Management',
+        description: 'Track on-hand, reserved, and low-stock products',
+      },
     ];
 
     // Create or update feature flags
@@ -80,6 +85,7 @@ export class PlanSeedService {
           BULK_UPLOAD: { enabled: false },
           API_ACCESS: { enabled: false },
           CUSTOM_BRANDING: { enabled: false },
+          INVENTORY_MANAGEMENT: { enabled: false },
         },
       },
       {
@@ -94,6 +100,7 @@ export class PlanSeedService {
           BULK_UPLOAD: { enabled: true },
           API_ACCESS: { enabled: false },
           CUSTOM_BRANDING: { enabled: false },
+          INVENTORY_MANAGEMENT: { enabled: true },
         },
       },
       {
@@ -108,6 +115,7 @@ export class PlanSeedService {
           BULK_UPLOAD: { enabled: true },
           API_ACCESS: { enabled: true },
           CUSTOM_BRANDING: { enabled: true },
+          INVENTORY_MANAGEMENT: { enabled: true },
         },
       },
     ];

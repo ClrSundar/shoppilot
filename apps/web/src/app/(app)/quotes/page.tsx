@@ -21,6 +21,7 @@ import { useAppToast } from '@/hooks/use-app-toast';
 import { Quote, quotesService } from '@/services/quotes.service';
 import { productsService } from '@/services/products.service';
 import { customersService } from '@/services/customers.service';
+import { inventoryService } from '@/services/inventory.service';
 import { Select, FormControl, InputLabel } from '@mui/material';
 import type { QuoteStatus } from '@/services/quotes.service';
 
@@ -70,6 +71,11 @@ export default function QuotesPage() {
   const { data: products = [] } = useQuery({
     queryKey: ['products'],
     queryFn: productsService.getAll,
+  });
+
+  const { data: inventoryStocks = [] } = useQuery({
+    queryKey: ['inventory', 'stocks'],
+    queryFn: inventoryService.getStocks,
   });
 
   const createMutation = useMutation({
@@ -158,8 +164,23 @@ export default function QuotesPage() {
 
     const unitPrice = Number(product.sellingPrice);
 
+    const stock = inventoryStocks.find((item) => item.productId === product.id);
+    const available = stock
+      ? Number(stock.onHand) - Number(stock.reserved)
+      : Number.POSITIVE_INFINITY;
+
     setItems((prevItems) => {
       const existing = prevItems.find((item) => item.productId === product.id);
+
+      if (existing && existing.quantity + qty > available) {
+        showToast('Quantity exceeds available stock', 'error');
+        return prevItems;
+      }
+
+      if (!existing && qty > available) {
+        showToast('Quantity exceeds available stock', 'error');
+        return prevItems;
+      }
 
       if (existing) {
         return prevItems.map((item) =>
@@ -233,8 +254,23 @@ export default function QuotesPage() {
 
     const unitPrice = Number(product.sellingPrice);
 
+    const stock = inventoryStocks.find((item) => item.productId === product.id);
+    const available = stock
+      ? Number(stock.onHand) - Number(stock.reserved)
+      : Number.POSITIVE_INFINITY;
+
     setEditItems((prevItems) => {
       const existing = prevItems.find((item) => item.productId === product.id);
+
+      if (existing && existing.quantity + qty > available) {
+        showToast('Quantity exceeds available stock', 'error');
+        return prevItems;
+      }
+
+      if (!existing && qty > available) {
+        showToast('Quantity exceeds available stock', 'error');
+        return prevItems;
+      }
 
       if (existing) {
         return prevItems.map((item) =>
@@ -442,6 +478,17 @@ export default function QuotesPage() {
                     {products.map((product) => (
                       <MenuItem key={product.id} value={product.id}>
                         {product.name} - ₹{product.sellingPrice}
+                        {(() => {
+                          const stock = inventoryStocks.find(
+                            (item) => item.productId === product.id,
+                          );
+
+                          if (!stock) {
+                            return ' (Avail: N/A)';
+                          }
+
+                          return ` (Avail: ${Number(stock.onHand) - Number(stock.reserved)})`;
+                        })()}
                       </MenuItem>
                     ))}
                   </TextField>
@@ -657,6 +704,17 @@ export default function QuotesPage() {
               {products.map((product) => (
                 <MenuItem key={product.id} value={product.id}>
                   {product.name} - ₹{product.sellingPrice}
+                  {(() => {
+                    const stock = inventoryStocks.find(
+                      (item) => item.productId === product.id,
+                    );
+
+                    if (!stock) {
+                      return ' (Avail: N/A)';
+                    }
+
+                    return ` (Avail: ${Number(stock.onHand) - Number(stock.reserved)})`;
+                  })()}
                 </MenuItem>
               ))}
             </TextField>

@@ -30,6 +30,8 @@ model Tenant {
   users        User[]
   categories   ProductCategory[]
   products     Product[]
+  inventoryStocks InventoryStock[]
+  inventoryLedgerEntries InventoryLedgerEntry[]
   customers    Customer[]
   quotes       Quote[]
   whatsappConversations WhatsAppConversation[]
@@ -280,6 +282,8 @@ model Product {
   active        Boolean  @default(true)
 
   quoteItems    QuoteItem[]
+  inventoryStocks InventoryStock[]
+  inventoryLedgerEntries InventoryLedgerEntry[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -324,6 +328,22 @@ enum QuoteStatus {
   CANCELLED
 }
 
+enum InventoryMovementType {
+  IN
+  OUT
+  ADJUST_IN
+  ADJUST_OUT
+  RESERVE
+  RELEASE
+}
+
+enum InventoryReferenceType {
+  MANUAL
+  QUOTE
+  ORDER
+  RETURN
+}
+
 enum WhatsAppIntent {
   NONE
   ADD_CUSTOMER
@@ -366,6 +386,7 @@ model Quote {
   quoteNumber   String
 
   status        QuoteStatus  @default(DRAFT)
+  stockReserved Boolean      @default(false)
 
   subtotal        Decimal       @db.Decimal(12,2)
   taxAmount       Decimal       @db.Decimal(12,2)
@@ -407,4 +428,59 @@ model QuoteItem {
   createdAt     DateTime    @default(now())
 
   @@index([quoteId])
+}
+
+model InventoryStock {
+  id            String      @id @default(uuid())
+
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id])
+
+  onHand        Decimal     @default(0) @db.Decimal(12,2)
+  reserved      Decimal     @default(0) @db.Decimal(12,2)
+  reorderLevel  Decimal     @default(0) @db.Decimal(12,2)
+
+  active        Boolean     @default(true)
+
+  ledgerEntries InventoryLedgerEntry[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([tenantId])
+  @@index([productId])
+  @@unique([tenantId, productId])
+}
+
+model InventoryLedgerEntry {
+  id             String                 @id @default(uuid())
+
+  tenantId       String
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id])
+
+  stockId        String
+  stock          InventoryStock         @relation(fields: [stockId], references: [id])
+
+  productId      String
+  product        Product                @relation(fields: [productId], references: [id])
+
+  movementType   InventoryMovementType
+  quantity       Decimal                @db.Decimal(12,2)
+
+  referenceType  InventoryReferenceType @default(MANUAL)
+  referenceId    String?
+
+  note           String?
+
+  createdById    String?
+
+  createdAt      DateTime               @default(now())
+
+  @@index([tenantId])
+  @@index([productId])
+  @@index([stockId])
+  @@index([tenantId, createdAt])
 }
