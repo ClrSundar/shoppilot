@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { InventoryReferenceType, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import type { QuoteStatus } from './dto/update-quote-status.dto';
-import { InventoryReferenceType, Prisma } from '@prisma/client';
 
 const inventoryMovementType = {
   RESERVE: 'RESERVE',
@@ -18,7 +18,7 @@ export class QuotesService {
   constructor(private readonly prisma: PrismaService) {}
 
   private async reserveInventoryForQuote(
-    tx: Prisma.TransactionClient,
+    tx: any,
     tenantId: string,
     userId: string,
     quote: {
@@ -91,7 +91,7 @@ export class QuotesService {
   }
 
   private async dispatchInventoryForQuote(
-    tx: Prisma.TransactionClient,
+    tx: any,
     tenantId: string,
     userId: string,
     quote: {
@@ -164,7 +164,7 @@ export class QuotesService {
   }
 
   private async releaseInventoryForQuote(
-    tx: Prisma.TransactionClient,
+    tx: any,
     tenantId: string,
     userId: string,
     quote: {

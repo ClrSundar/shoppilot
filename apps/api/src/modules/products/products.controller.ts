@@ -11,8 +11,8 @@ import {
 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-import { CurrentUser } from 'src/common/decorators/current-user.decorator';
-import type { JwtPayload } from 'src/common/types/jwt-payload.type';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../../common/types/jwt-payload.type';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
