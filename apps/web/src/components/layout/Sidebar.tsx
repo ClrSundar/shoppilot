@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth.store';
 
 type SidebarProps = {
   isMobileOpen: boolean;
@@ -22,6 +23,14 @@ const navigationItems = [
 
 export function Sidebar({ isMobileOpen, onNavigate, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const logout = useAuthStore((state) => state.logout);
+
+  const handleLogout = () => {
+    onClose();
+    logout();
+    router.push('/login');
+  };
 
   const sidebarShellStyle = {
     width: 288,
@@ -65,6 +74,7 @@ export function Sidebar({ isMobileOpen, onNavigate, onClose }: SidebarProps) {
           pathname={pathname}
           onNavigate={onNavigate}
           onClose={onClose}
+          onLogout={handleLogout}
         />
       </aside>
 
@@ -76,6 +86,7 @@ export function Sidebar({ isMobileOpen, onNavigate, onClose }: SidebarProps) {
           pathname={pathname}
           onNavigate={onNavigate}
           onClose={onClose}
+          onLogout={handleLogout}
         />
       </aside>
     </>
@@ -86,10 +97,12 @@ function SidebarContent({
   pathname,
   onNavigate,
   onClose,
+  onLogout,
 }: {
   pathname: string;
   onNavigate: () => void;
   onClose: () => void;
+  onLogout: () => void;
 }) {
   return (
     <div
@@ -208,20 +221,59 @@ function SidebarContent({
             'linear-gradient(180deg, rgba(15, 23, 42, 0.52), rgba(30, 41, 59, 0.72))',
         }}
       >
-        <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span
+            aria-hidden="true"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 999,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(248, 250, 252, 0.18)',
+              color: '#f8fafc',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              flexShrink: 0,
+            }}
+          >
+            SP
+          </span>
+
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: '#f8fafc', fontSize: 13, fontWeight: 700 }}>
+              Profile
+            </div>
+            <div style={{ color: '#94a3b8', fontSize: 11 }}>
+              Signed in
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onLogout}
           style={{
-            fontSize: 12,
-            color: '#94a3b8',
-            textTransform: 'uppercase',
-            letterSpacing: '0.16em',
+            width: '100%',
+            marginTop: 12,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '10px 12px',
+            borderRadius: 12,
+            border: '1px solid rgba(148, 163, 184, 0.32)',
+            background: 'rgba(248, 250, 252, 0.08)',
+            color: '#f8fafc',
+            fontWeight: 600,
+            cursor: 'pointer',
           }}
         >
-          Quick tip
-        </div>
-        <div style={{ marginTop: 10, lineHeight: 1.5, color: '#e2e8f0' }}>
-          Keep the menu open on larger screens and use the drawer on phones for
-          easier navigation.
-        </div>
+          <span style={{ fontSize: 16 }}>↩</span>
+          <span>Logout</span>
+        </button>
       </div>
     </div>
   );
