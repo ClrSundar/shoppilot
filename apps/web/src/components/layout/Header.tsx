@@ -1,24 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/auth.store';
-
 type HeaderProps = {
   onMenuClick: () => void;
 };
 
 export function Header({ onMenuClick }: HeaderProps) {
-  const router = useRouter();
-
-  const logout = useAuthStore(
-    (state) => state.logout,
-  );
-
-  const handleLogout = () => {
-    logout();
-    router.push('/login');
-  };
-
   return (
     <header
       style={{
@@ -66,26 +52,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={handleLogout}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '10px 14px',
-          borderRadius: 14,
-          border: '1px solid rgba(148, 163, 184, 0.3)',
-          background: '#ffffff',
-          color: '#0f172a',
-          fontWeight: 600,
-          cursor: 'pointer',
-          boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)',
-        }}
-      >
-        <span style={{ fontSize: 16 }}>↩</span>
-        <span className="hidden sm:inline">Logout</span>
-      </button>
+      <div />
     </header>
   );
 }
