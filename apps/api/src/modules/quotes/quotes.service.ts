@@ -57,8 +57,8 @@ export class QuotesService {
         );
       }
 
-      // Reserve and deduct from on-hand immediately when quote approved
-      const newOnHand = Number(stock.onHand) - quantity;
+      // Reserve stock without reducing physical on-hand.
+      const newOnHand = Number(stock.onHand);
       const newReserved = Number(stock.reserved) + quantity;
 
       await tx.inventoryStock.update({
@@ -82,20 +82,6 @@ export class QuotesService {
           referenceType: InventoryReferenceType.QUOTE,
           referenceId: quote.id,
           note: `Reserved for quote ${quote.quoteNumber}`,
-          createdById: userId,
-        },
-      });
-
-      await tx.inventoryLedgerEntry.create({
-        data: {
-          tenantId,
-          stockId: stock.id,
-          productId: item.productId,
-          movementType: InventoryMovementType.OUT,
-          quantity,
-          referenceType: InventoryReferenceType.QUOTE,
-          referenceId: quote.id,
-          note: `Deducted for approved quote ${quote.quoteNumber}`,
           createdById: userId,
         },
       });
@@ -134,8 +120,8 @@ export class QuotesService {
         );
       }
 
-      // Release and refund to on-hand
-      const newOnHand = Number(stock.onHand) + quantity;
+      // Release reserved stock without changing physical on-hand.
+      const newOnHand = Number(stock.onHand);
       const newReserved = Number(stock.reserved) - quantity;
 
       await tx.inventoryStock.update({
@@ -159,20 +145,6 @@ export class QuotesService {
           referenceType: InventoryReferenceType.QUOTE,
           referenceId: quote.id,
           note: `Released reservation for quote ${quote.quoteNumber}`,
-          createdById: userId,
-        },
-      });
-
-      await tx.inventoryLedgerEntry.create({
-        data: {
-          tenantId,
-          stockId: stock.id,
-          productId: item.productId,
-          movementType: InventoryMovementType.IN,
-          quantity,
-          referenceType: InventoryReferenceType.QUOTE,
-          referenceId: quote.id,
-          note: `Refunded for cancelled quote ${quote.quoteNumber}`,
           createdById: userId,
         },
       });
