@@ -28,10 +28,8 @@ export function Header({ onMenuClick }: HeaderProps) {
         gap: 16,
         minHeight: 72,
         padding: '0 20px',
-        borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
-        background: 'rgba(15, 23, 42, 0.78)',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
+        borderBottom: '1px solid rgba(148, 163, 184, 0.22)',
+        background: '#ffffff',
         position: 'sticky',
         top: 0,
         zIndex: 30,
@@ -50,19 +48,19 @@ export function Header({ onMenuClick }: HeaderProps) {
             height: 44,
             borderRadius: 14,
             border: '1px solid rgba(148, 163, 184, 0.22)',
-            background: 'rgba(30, 41, 59, 0.92)',
-            color: '#f8fafc',
+            background: '#f8fafc',
+            color: '#0f172a',
             cursor: 'pointer',
           }}
         >
           <span style={{ fontSize: 20, lineHeight: 1 }}>☰</span>
         </button>
 
-        <div style={{ minWidth: 0 }}>
-          <div style={{ color: '#f8fafc', fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>
+        <div style={{ minWidth: 0 }} className="md:hidden">
+          <div style={{ color: '#0f172a', fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>
             ShopPilot
           </div>
-          <div style={{ color: '#94a3b8', fontSize: 12 }}>
+          <div style={{ color: '#64748b', fontSize: 12 }}>
             Inventory, quotes, and customers in one place
           </div>
         </div>
@@ -77,12 +75,12 @@ export function Header({ onMenuClick }: HeaderProps) {
           gap: 8,
           padding: '10px 14px',
           borderRadius: 14,
-          border: '1px solid rgba(248, 250, 252, 0.14)',
-          background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.12), rgba(59, 130, 246, 0.16))',
-          color: '#f8fafc',
+          border: '1px solid rgba(148, 163, 184, 0.3)',
+          background: '#ffffff',
+          color: '#0f172a',
           fontWeight: 600,
           cursor: 'pointer',
-          boxShadow: '0 12px 28px rgba(15, 23, 42, 0.18)',
+          boxShadow: '0 8px 18px rgba(15, 23, 42, 0.08)',
         }}
       >
         <span style={{ fontSize: 16 }}>↩</span>

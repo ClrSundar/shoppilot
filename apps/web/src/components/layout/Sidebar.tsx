@@ -70,7 +70,7 @@ export function Sidebar({ isMobileOpen, onNavigate, onClose }: SidebarProps) {
 
       <aside
         style={sidebarShellStyle}
-        className="hidden md:flex md:flex-col md:min-h-screen md:sticky md:top-0 md:rounded-r-[28px] md:border-r md:border-slate-700/60"
+        className="hidden md:flex md:flex-col md:min-h-screen md:sticky md:top-0 md:border-r md:border-slate-700/60"
       >
         <SidebarContent
           pathname={pathname}
