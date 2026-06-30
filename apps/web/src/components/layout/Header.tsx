@@ -41,15 +41,6 @@ export function Header({ onMenuClick }: HeaderProps) {
         >
           <span style={{ fontSize: 20, lineHeight: 1 }}>☰</span>
         </button>
-
-        <div style={{ minWidth: 0 }} className="md:hidden">
-          <div style={{ color: '#0f172a', fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>
-            ShopPilot
-          </div>
-          <div style={{ color: '#64748b', fontSize: 12 }}>
-            Inventory, quotes, and customers in one place
-          </div>
-        </div>
       </div>
 
     </header>
