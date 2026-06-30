@@ -1,7 +1,27 @@
-import { QuoteStatus } from '@prisma/client';
-import { IsEnum } from 'class-validator';
+import { IsIn } from 'class-validator';
+
+export type QuoteStatus =
+  | 'DRAFT'
+  | 'SENT'
+  | 'APPROVED'
+  | 'INVOICED'
+  | 'DISPATCHED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+
+const quoteStatuses: QuoteStatus[] = [
+  'DRAFT',
+  'SENT',
+  'APPROVED',
+  'INVOICED',
+  'DISPATCHED',
+  'REJECTED',
+  'EXPIRED',
+  'CANCELLED',
+];
 
 export class UpdateQuoteStatusDto {
-  @IsEnum(QuoteStatus)
+  @IsIn(quoteStatuses)
   status!: QuoteStatus;
 }

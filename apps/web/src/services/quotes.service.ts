@@ -29,6 +29,8 @@ export type QuoteStatus =
   | 'DRAFT'
   | 'SENT'
   | 'APPROVED'
+  | 'INVOICED'
+  | 'DISPATCHED'
   | 'REJECTED'
   | 'EXPIRED'
   | 'CANCELLED';

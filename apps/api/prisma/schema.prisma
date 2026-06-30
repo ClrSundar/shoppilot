@@ -323,6 +323,8 @@ enum QuoteStatus {
   DRAFT
   SENT
   APPROVED
+  INVOICED
+  DISPATCHED
   REJECTED
   EXPIRED
   CANCELLED
@@ -335,6 +337,7 @@ enum InventoryMovementType {
   ADJUST_OUT
   RESERVE
   RELEASE
+  DISPATCH
 }
 
 enum InventoryReferenceType {

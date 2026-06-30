@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -9,12 +10,7 @@ export function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-
-  useEffect(() => {
-    setIsMobileNavOpen(false);
-  }, [pathname]);
 
   return (
     <ProtectedRoute>

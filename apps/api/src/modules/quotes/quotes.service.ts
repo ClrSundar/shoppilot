@@ -4,12 +4,14 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
-import {
-  InventoryMovementType,
-  InventoryReferenceType,
-  Prisma,
-  QuoteStatus,
-} from '@prisma/client';
+import type { QuoteStatus } from './dto/update-quote-status.dto';
+import { InventoryReferenceType, Prisma } from '@prisma/client';
+
+const inventoryMovementType = {
+  RESERVE: 'RESERVE',
+  RELEASE: 'RELEASE',
+  DISPATCH: 'DISPATCH',
+} as const;
 
 @Injectable()
 export class QuotesService {
@@ -71,17 +73,90 @@ export class QuotesService {
         },
       });
 
-      // Log both reserve and deduction
+      // Log the reservation so available stock stays blocked until dispatch.
       await tx.inventoryLedgerEntry.create({
         data: {
           tenantId,
           stockId: stock.id,
           productId: item.productId,
-          movementType: InventoryMovementType.RESERVE,
+          movementType: inventoryMovementType.RESERVE,
           quantity,
           referenceType: InventoryReferenceType.QUOTE,
           referenceId: quote.id,
           note: `Reserved for quote ${quote.quoteNumber}`,
+          createdById: userId,
+        },
+      });
+    }
+  }
+
+  private async dispatchInventoryForQuote(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    userId: string,
+    quote: {
+      id: string;
+      quoteNumber: string;
+      items: Array<{
+        productId: string;
+        productName: string;
+        quantity: Prisma.Decimal;
+      }>;
+    },
+  ) {
+    for (const item of quote.items) {
+      const quantity = Number(item.quantity);
+
+      const stock = await tx.inventoryStock.findUnique({
+        where: {
+          tenantId_productId: {
+            tenantId,
+            productId: item.productId,
+          },
+        },
+      });
+
+      if (!stock) {
+        throw new BadRequestException(
+          `Inventory stock not found for product: ${item.productName}`,
+        );
+      }
+
+      if (Number(stock.reserved) < quantity) {
+        throw new BadRequestException(
+          `Reserved stock mismatch for product: ${item.productName}`,
+        );
+      }
+
+      if (Number(stock.onHand) < quantity) {
+        throw new BadRequestException(
+          `Insufficient on-hand stock to dispatch product: ${item.productName}`,
+        );
+      }
+
+      const nextOnHand = Number(stock.onHand) - quantity;
+      const nextReserved = Number(stock.reserved) - quantity;
+
+      await tx.inventoryStock.update({
+        where: {
+          id: stock.id,
+        },
+        data: {
+          onHand: new Prisma.Decimal(nextOnHand),
+          reserved: new Prisma.Decimal(nextReserved),
+        },
+      });
+
+      await tx.inventoryLedgerEntry.create({
+        data: {
+          tenantId,
+          stockId: stock.id,
+          productId: item.productId,
+          movementType: inventoryMovementType.DISPATCH as never,
+          quantity,
+          referenceType: InventoryReferenceType.QUOTE,
+          referenceId: quote.id,
+          note: `Dispatched for invoiced quote ${quote.quoteNumber}`,
           createdById: userId,
         },
       });
@@ -134,13 +209,13 @@ export class QuotesService {
         },
       });
 
-      // Log both release and refund
+      // Log the reservation release so stock becomes available again.
       await tx.inventoryLedgerEntry.create({
         data: {
           tenantId,
           stockId: stock.id,
           productId: item.productId,
-          movementType: InventoryMovementType.RELEASE,
+          movementType: inventoryMovementType.RELEASE,
           quantity,
           referenceType: InventoryReferenceType.QUOTE,
           referenceId: quote.id,
@@ -307,25 +382,49 @@ export class QuotesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      if (status === QuoteStatus.APPROVED && !quote.stockReserved) {
+      const currentStatus = quote.status as string;
+
+      if (status === 'APPROVED' && !quote.stockReserved) {
         await this.reserveInventoryForQuote(tx, tenantId, userId, quote);
       }
 
+      if (status === 'INVOICED') {
+        if (currentStatus !== 'APPROVED' || !quote.stockReserved) {
+          throw new BadRequestException('Approve the quote before invoicing it');
+        }
+      }
+
+      if (status === 'DISPATCHED') {
+        if (currentStatus !== 'INVOICED') {
+          throw new BadRequestException('Generate an invoice before dispatching goods');
+        }
+
+        if (!quote.stockReserved) {
+          throw new BadRequestException('No reserved stock available to dispatch');
+        }
+
+        await this.dispatchInventoryForQuote(tx, tenantId, userId, quote);
+      }
+
       if (
-        (status === QuoteStatus.CANCELLED ||
-          status === QuoteStatus.REJECTED ||
-          status === QuoteStatus.EXPIRED) &&
+        (status === 'CANCELLED' ||
+          status === 'REJECTED' ||
+          status === 'EXPIRED') &&
         quote.stockReserved
       ) {
         await this.releaseInventoryForQuote(tx, tenantId, userId, quote);
       }
 
       const stockReserved =
-        status === QuoteStatus.APPROVED
+        status === 'APPROVED'
           ? true
-          : status === QuoteStatus.CANCELLED ||
-              status === QuoteStatus.REJECTED ||
-              status === QuoteStatus.EXPIRED
+          : status === 'DISPATCHED'
+            ? false
+            : status === 'INVOICED'
+              ? quote.stockReserved
+          : status === 'CANCELLED' ||
+              status === 'REJECTED' ||
+              status === 'EXPIRED'
             ? false
             : quote.stockReserved;
 
@@ -334,7 +433,7 @@ export class QuotesService {
           id: quoteId,
         },
         data: {
-          status,
+          status: status as any,
           stockReserved,
         },
         include: {
@@ -357,7 +456,7 @@ export class QuotesService {
       throw new BadRequestException('Quote not found');
     }
 
-    if (quote.status !== QuoteStatus.DRAFT) {
+    if (quote.status !== 'DRAFT') {
       throw new BadRequestException('Only draft quotes can be edited');
     }
 

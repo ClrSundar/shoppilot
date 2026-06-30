@@ -1,8 +1,37 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
-export function Sidebar() {
+type SidebarProps = {
+  isMobileOpen: boolean;
+  onNavigate: () => void;
+  onClose: () => void;
+};
+
+const navigationItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: '⌂' },
+  { href: '/categories', label: 'Categories', icon: '◫' },
+  { href: '/products', label: 'Products', icon: '▦' },
+  { href: '/inventory', label: 'Inventory', icon: '◌' },
+  { href: '/customers', label: 'Customers', icon: '☺' },
+  { href: '/quotes', label: 'Quotes', icon: '✎' },
+  { href: '/team', label: 'Team', icon: '⟡' },
+  { href: '/billing', label: 'Billing', icon: '$' },
+];
+
+export function Sidebar({ isMobileOpen, onNavigate, onClose }: SidebarProps) {
+  const pathname = usePathname();
+
+  const sidebarShellStyle = {
+    width: 288,
+    flexShrink: 0,
+    padding: 16,
+    background:
+      'linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.98))',
+    color: '#e2e8f0',
+  };
+
   return (
     <>
       {isMobileOpen ? (
@@ -32,14 +61,22 @@ export function Sidebar() {
         }}
         className="md:hidden"
       >
-        <SidebarContent pathname={pathname} onNavigate={onNavigate} onClose={onClose} />
+        <SidebarContent
+          pathname={pathname}
+          onNavigate={onNavigate}
+          onClose={onClose}
+        />
       </aside>
 
       <aside
         style={sidebarShellStyle}
         className="hidden md:flex md:flex-col md:min-h-screen md:sticky md:top-0 md:rounded-r-[28px] md:border-r md:border-slate-700/60"
       >
-        <SidebarContent pathname={pathname} onNavigate={onNavigate} onClose={onClose} />
+        <SidebarContent
+          pathname={pathname}
+          onNavigate={onNavigate}
+          onClose={onClose}
+        />
       </aside>
     </>
   );
@@ -63,9 +100,23 @@ function SidebarContent({
         gap: 20,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
         <div>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: '#f8fafc' }}>
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 800,
+              letterSpacing: '-0.03em',
+              color: '#f8fafc',
+            }}
+          >
             ShopPilot
           </div>
           <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
@@ -94,7 +145,8 @@ function SidebarContent({
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {navigationItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           return (
             <Link
@@ -107,14 +159,18 @@ function SidebarContent({
                 gap: 12,
                 padding: '12px 14px',
                 borderRadius: 14,
-                border: isActive ? '1px solid rgba(96, 165, 250, 0.4)' : '1px solid transparent',
+                border: isActive
+                  ? '1px solid rgba(96, 165, 250, 0.4)'
+                  : '1px solid transparent',
                 background: isActive
                   ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.26), rgba(14, 165, 233, 0.14))'
                   : 'transparent',
                 color: isActive ? '#f8fafc' : '#cbd5e1',
                 textDecoration: 'none',
                 fontWeight: 600,
-                boxShadow: isActive ? '0 12px 24px rgba(15, 23, 42, 0.22)' : 'none',
+                boxShadow: isActive
+                  ? '0 12px 24px rgba(15, 23, 42, 0.22)'
+                  : 'none',
               }}
             >
               <span
@@ -126,7 +182,9 @@ function SidebarContent({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: isActive ? 'rgba(248, 250, 252, 0.14)' : 'rgba(148, 163, 184, 0.12)',
+                  background: isActive
+                    ? 'rgba(248, 250, 252, 0.14)'
+                    : 'rgba(148, 163, 184, 0.12)',
                   color: isActive ? '#f8fafc' : '#94a3b8',
                   fontSize: 14,
                   flexShrink: 0,
@@ -146,14 +204,23 @@ function SidebarContent({
           padding: 16,
           borderRadius: 20,
           border: '1px solid rgba(148, 163, 184, 0.16)',
-          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.52), rgba(30, 41, 59, 0.72))',
+          background:
+            'linear-gradient(180deg, rgba(15, 23, 42, 0.52), rgba(30, 41, 59, 0.72))',
         }}
       >
-        <div style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
+        <div
+          style={{
+            fontSize: 12,
+            color: '#94a3b8',
+            textTransform: 'uppercase',
+            letterSpacing: '0.16em',
+          }}
+        >
           Quick tip
         </div>
         <div style={{ marginTop: 10, lineHeight: 1.5, color: '#e2e8f0' }}>
-          Keep the menu open on larger screens and use the drawer on phones for easier navigation.
+          Keep the menu open on larger screens and use the drawer on phones for
+          easier navigation.
         </div>
       </div>
     </div>

@@ -6,7 +6,8 @@ export type InventoryMovementType =
   | 'ADJUST_IN'
   | 'ADJUST_OUT'
   | 'RESERVE'
-  | 'RELEASE';
+  | 'RELEASE'
+  | 'DISPATCH';
 
 export type InventoryReferenceType =
   | 'MANUAL'

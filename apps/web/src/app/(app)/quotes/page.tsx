@@ -592,6 +592,8 @@ export default function QuotesPage() {
                   <MenuItem value="DRAFT">Draft</MenuItem>
                   <MenuItem value="SENT">Sent</MenuItem>
                   <MenuItem value="APPROVED">Approved</MenuItem>
+                  <MenuItem value="INVOICED">Invoiced</MenuItem>
+                  <MenuItem value="DISPATCHED">Dispatched</MenuItem>
                   <MenuItem value="REJECTED">Rejected</MenuItem>
                   <MenuItem value="EXPIRED">Expired</MenuItem>
                   <MenuItem value="CANCELLED">Cancelled</MenuItem>
@@ -643,7 +645,35 @@ export default function QuotesPage() {
                   </Button>
                 )}
 
-                {selectedQuote.status !== 'CANCELLED' && (
+                {selectedQuote.status === 'APPROVED' && (
+                  <Button
+                    variant="contained"
+                    onClick={() =>
+                      updateStatusMutation.mutate({
+                        id: selectedQuote.id,
+                        status: 'INVOICED',
+                      })
+                    }
+                  >
+                    Generate Invoice
+                  </Button>
+                )}
+
+                {selectedQuote.status === 'INVOICED' && (
+                  <Button
+                    variant="contained"
+                    onClick={() =>
+                      updateStatusMutation.mutate({
+                        id: selectedQuote.id,
+                        status: 'DISPATCHED',
+                      })
+                    }
+                  >
+                    Dispatch Goods
+                  </Button>
+                )}
+
+                {selectedQuote.status !== 'CANCELLED' && selectedQuote.status !== 'DISPATCHED' && (
                   <Button color="error" variant="outlined" onClick={handleCancelQuote}>
                     Cancel Quote
                   </Button>
