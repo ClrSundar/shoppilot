@@ -6,8 +6,11 @@ import {
   Param,
   Post,
   Put,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -30,6 +33,15 @@ export class ProductsController {
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateProductDto) {
     return this.productsService.create(user.tenantId, dto);
+  }
+
+  @Post('bulk-upload')
+  @UseInterceptors(FileInterceptor('file'))
+  bulkUpload(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.productsService.bulkUpload(user.tenantId, file);
   }
 
   @Get()

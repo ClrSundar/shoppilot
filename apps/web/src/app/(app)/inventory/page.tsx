@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
   Box,
@@ -217,6 +218,10 @@ export default function InventoryPage() {
         <Typography variant="h5">Inventory</Typography>
 
         <Stack direction="row" spacing={1}>
+          <Button component={Link} href="/inventory/bulk-upload" variant="outlined">
+            Bulk Upload
+          </Button>
+
           <Button variant="outlined" onClick={() => setInitializeOpen(true)}>
             Initialize Stock
           </Button>

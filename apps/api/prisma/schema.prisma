@@ -33,6 +33,7 @@ model Tenant {
   inventoryStocks InventoryStock[]
   inventoryLedgerEntries InventoryLedgerEntry[]
   customers    Customer[]
+  agents       Agent[]
   quotes       Quote[]
   whatsappConversations WhatsAppConversation[]
   subscription  Subscription?
@@ -41,6 +42,10 @@ model Tenant {
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+}
+
+enum CommissionType {
+  PERCENTAGE
 }
 
 model PlatformAdmin {
@@ -319,6 +324,34 @@ model Customer {
   @@index([name])
 }
 
+model Agent {
+  id                          String          @id @default(uuid())
+
+  tenantId                    String
+  tenant                      Tenant          @relation(fields: [tenantId], references: [id])
+
+  name                        String
+  phone                       String?
+  whatsappNumber              String?
+  email                       String?
+  address                     String?
+  referenceCode               String?
+
+  defaultCommissionType       CommissionType  @default(PERCENTAGE)
+  defaultCommissionPercentage Decimal         @default(0) @db.Decimal(5,2)
+
+  active                      Boolean         @default(true)
+
+  quotes                      Quote[]
+
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+
+  @@index([tenantId])
+  @@index([name])
+  @@unique([tenantId, referenceCode])
+}
+
 enum QuoteStatus {
   DRAFT
   SENT
@@ -386,6 +419,9 @@ model Quote {
   customerId    String
   customer      Customer     @relation(fields: [customerId], references: [id])
 
+  agentId       String?
+  agent         Agent?       @relation(fields: [agentId], references: [id])
+
   quoteNumber   String
 
   status        QuoteStatus  @default(DRAFT)
@@ -398,6 +434,10 @@ model Quote {
   discountAmount  Decimal       @default(0) @db.Decimal(12,2)
   taxPercentage   Decimal       @default(0) @db.Decimal(5,2)
 
+  agentCommissionType        CommissionType @default(PERCENTAGE)
+  agentCommissionPercentage  Decimal        @default(0) @db.Decimal(5,2)
+  agentCommissionAmount      Decimal        @default(0) @db.Decimal(12,2)
+
   notes         String?
 
   items         QuoteItem[]
@@ -407,6 +447,7 @@ model Quote {
 
   @@index([tenantId])
   @@index([customerId])
+  @@index([agentId])
 
   @@unique([tenantId, quoteNumber])
 }

@@ -66,6 +66,32 @@ export type AdjustInventoryPayload = {
   note?: string;
 };
 
+export type UnifiedBulkUploadResult = {
+  totalSheets: number;
+  categories: {
+    totalRows: number;
+    created: number;
+    skipped: number;
+    errors: string[];
+  };
+  products: {
+    totalRows: number;
+    created: number;
+    skipped: number;
+    errors: string[];
+  };
+  inventory: {
+    totalRows: number;
+    initialized: number;
+    skipped: number;
+    errors: string[];
+  };
+  summary: {
+    totalCreated: number;
+    totalSkipped: number;
+  };
+};
+
 export const inventoryService = {
   getStocks: async () => {
     const res = await api.get<InventoryStock[]>('/inventory/stocks');
@@ -94,6 +120,13 @@ export const inventoryService = {
     const res = await api.get<InventoryLedgerEntry[]>('/inventory/ledger', {
       params: productId ? { productId } : undefined,
     });
+    return res.data;
+  },
+
+  bulkUpload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post<UnifiedBulkUploadResult>('/bulk-upload', formData);
     return res.data;
   },
 };

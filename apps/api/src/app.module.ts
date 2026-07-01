@@ -15,6 +15,8 @@ import { PlatformAuthModule } from './modules/platform-auth/platform-auth.module
 import { PlatformModule } from './modules/platform/platform.module';
 import { FeatureGuard } from './common/guards/feature.guard';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { UnifiedBulkUploadModule } from './modules/unified-bulk-upload/unified-bulk-upload.module';
+import { AgentsModule } from './modules/agents/agents.module';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { InventoryModule } from './modules/inventory/inventory.module';
     PlatformAuthModule,
     PlatformModule,
     InventoryModule,
+    UnifiedBulkUploadModule,
+    AgentsModule,
   ],
   providers: [
     {

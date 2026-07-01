@@ -55,6 +55,7 @@ const quickActions = [
   { label: 'Add Product', href: '/products' },
   { label: 'Add Customer', href: '/customers' },
   { label: 'Create Quote', href: '/quotes' },
+  { label: 'Bulk Upload', href: '/inventory/bulk-upload' },
   { label: 'Check Inventory', href: '/inventory' },
 ];
 

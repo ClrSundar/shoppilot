@@ -17,6 +17,53 @@ const inventoryMovementType = {
 export class QuotesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async resolveAgentCommission(
+    tenantId: string,
+    dto: Pick<CreateQuoteDto, 'agentId' | 'agentCommissionPercentage'>,
+    totalAmount: number,
+  ) {
+    if (!dto.agentId) {
+      if (dto.agentCommissionPercentage !== undefined) {
+        throw new BadRequestException(
+          'Agent commission percentage can be set only when an agent is selected',
+        );
+      }
+
+      return {
+        agentId: null,
+        agentCommissionPercentage: 0,
+        agentCommissionAmount: 0,
+      };
+    }
+
+    const agent = await this.prisma.agent.findFirst({
+      where: {
+        id: dto.agentId,
+        tenantId,
+        active: true,
+      },
+    });
+
+    if (!agent) {
+      throw new BadRequestException('Agent not found or inactive');
+    }
+
+    const agentCommissionPercentage =
+      dto.agentCommissionPercentage !== undefined
+        ? dto.agentCommissionPercentage
+        : Number(agent.defaultCommissionPercentage);
+
+    const agentCommissionAmount = Number(
+      ((totalAmount * agentCommissionPercentage) / 100).toFixed(2),
+    );
+
+    return {
+      agentId: agent.id,
+      agentCommissionPercentage,
+      agentCommissionAmount,
+    };
+  }
+
   private async reserveInventoryForQuote(
     tx: any,
     tenantId: string,
@@ -300,17 +347,26 @@ export class QuotesService {
     const { quoteItems, subtotal, taxAmount, totalAmount } =
       await this.buildQuoteItems(tenantId, dto.items);
 
+    const {
+      agentId,
+      agentCommissionPercentage,
+      agentCommissionAmount,
+    } = await this.resolveAgentCommission(tenantId, dto, totalAmount);
+
     return this.prisma.quote.create({
       data: {
         tenantId,
 
         customerId: dto.customerId,
+        agentId,
 
         quoteNumber,
 
         subtotal,
         taxAmount,
         totalAmount,
+        agentCommissionPercentage,
+        agentCommissionAmount,
 
         notes: dto.notes,
 
@@ -320,6 +376,7 @@ export class QuotesService {
       },
       include: {
         customer: true,
+        agent: true,
         items: true,
       },
     });
@@ -332,6 +389,7 @@ export class QuotesService {
       },
       include: {
         customer: true,
+        agent: true,
         items: {
           include: {
             product: true,
@@ -352,6 +410,7 @@ export class QuotesService {
       },
       include: {
         customer: true,
+        agent: true,
         items: {
           include: {
             product: true,
@@ -438,6 +497,7 @@ export class QuotesService {
         },
         include: {
           customer: true,
+          agent: true,
           items: true,
         },
       });
@@ -474,16 +534,25 @@ export class QuotesService {
     const { quoteItems, subtotal, taxAmount, totalAmount } =
       await this.buildQuoteItems(tenantId, dto.items);
 
+    const {
+      agentId,
+      agentCommissionPercentage,
+      agentCommissionAmount,
+    } = await this.resolveAgentCommission(tenantId, dto, totalAmount);
+
     return this.prisma.quote.update({
       where: {
         id: quoteId,
       },
       data: {
         customerId: dto.customerId,
+        agentId,
         notes: dto.notes,
         subtotal,
         taxAmount,
         totalAmount,
+        agentCommissionPercentage,
+        agentCommissionAmount,
         items: {
           deleteMany: {},
           create: quoteItems,
@@ -491,6 +560,7 @@ export class QuotesService {
       },
       include: {
         customer: true,
+        agent: true,
         items: true,
       },
     });
@@ -505,6 +575,7 @@ export class QuotesService {
       include: {
         tenant: true,
         customer: true,
+        agent: true,
         items: true,
       },
     });

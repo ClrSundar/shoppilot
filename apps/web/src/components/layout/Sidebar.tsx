@@ -16,6 +16,7 @@ const navigationItems = [
   { href: '/products', label: 'Products', icon: '▦' },
   { href: '/inventory', label: 'Inventory', icon: '◌' },
   { href: '/customers', label: 'Customers', icon: '☺' },
+  { href: '/agents', label: 'Agents', icon: '♢' },
   { href: '/quotes', label: 'Quotes', icon: '✎' },
   { href: '/team', label: 'Team', icon: '⟡' },
   { href: '/billing', label: 'Billing', icon: '$' },

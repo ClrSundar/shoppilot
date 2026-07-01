@@ -9,12 +9,21 @@ export type Quote = {
   totalAmount: string;
   createdAt: string;
   notes?: string | null;
+  agentId?: string | null;
+  agentCommissionPercentage?: string;
+  agentCommissionAmount?: string;
   customer: {
     id: string;
     name: string;
     phone?: string | null;
     whatsappNumber?: string | null;
   };
+  agent?: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+  } | null;
   items?: {
     id: string;
     productId: string;
@@ -87,6 +96,8 @@ export const quotesService = {
 
 export type CreateQuotePayload = {
   customerId: string;
+  agentId?: string;
+  agentCommissionPercentage?: number;
   items: {
     productId: string;
     quantity: number;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { ChangeEvent, useState } from 'react';
 import {
   Alert,
   Box,
@@ -41,6 +41,7 @@ export default function TeamPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<TeamUser['role']>('SALES');
   const [password, setPassword] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
@@ -83,6 +84,24 @@ export default function TeamPage() {
     },
   });
 
+  const bulkUploadMutation = useMutation({
+    mutationFn: usersService.bulkUpload,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      showToast(
+        `Import complete: ${result.created} created, ${result.skipped} skipped`,
+        'success',
+      );
+      if (result.errors.length > 0) {
+        showToast(result.errors.slice(0, 3).join(' | '), 'error');
+      }
+    },
+    onError: (err: any) => {
+      showToast(err?.response?.data?.message ?? 'Failed to upload team Excel', 'error');
+    },
+    onSettled: () => setIsUploading(false),
+  });
+
   const resetForm = () => {
     setName('');
     setEmail('');
@@ -92,6 +111,18 @@ export default function TeamPage() {
 
   const handleSubmit = () => {
     createMutation.mutate({ name, email, role, password } as CreateUserPayload);
+  };
+
+  const handleExcelUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    setIsUploading(true);
+    bulkUploadMutation.mutate(file);
   };
 
   const columns: GridColDef<TeamUser>[] = [
@@ -166,9 +197,21 @@ export default function TeamPage() {
             Manage your shop's users and roles
           </Typography>
         </Box>
-        <Button variant="contained" onClick={() => setOpen(true)} sx={{ textTransform: 'none' }}>
-          Add User
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button component="label" variant="outlined" disabled={isUploading}>
+            Upload Excel
+            <input
+              hidden
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+            />
+          </Button>
+
+          <Button variant="contained" onClick={() => setOpen(true)} sx={{ textTransform: 'none' }}>
+            Add User
+          </Button>
+        </Stack>
       </Stack>
 
       <DataGrid

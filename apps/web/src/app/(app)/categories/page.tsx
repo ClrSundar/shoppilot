@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { ChangeEvent, useState } from 'react';
 import {
   Box,
   Button,
@@ -32,6 +32,7 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast, showToast, closeToast } = useAppToast();
 
   const { data = [], isLoading } = useQuery({
@@ -69,6 +70,22 @@ export default function CategoriesPage() {
       showToast('Category deleted successfully', 'success');
     },
     onError: () => showToast('Failed to delete category', 'error'),
+  });
+
+  const bulkUploadMutation = useMutation({
+    mutationFn: categoriesService.bulkUpload,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      showToast(
+        `Import complete: ${result.created} created, ${result.skipped} skipped`,
+        'success',
+      );
+      if (result.errors.length > 0) {
+        showToast(result.errors.slice(0, 3).join(' | '), 'error');
+      }
+    },
+    onError: () => showToast('Failed to upload category Excel', 'error'),
+    onSettled: () => setIsUploading(false),
   });
 
   const columns: GridColDef<Category>[] = [
@@ -149,6 +166,18 @@ export default function CategoriesPage() {
     createMutation.mutate(payload);
   };
 
+  const handleExcelUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    setIsUploading(true);
+    bulkUploadMutation.mutate(file);
+  };
+
   return (
     <Box>
       <Stack
@@ -161,9 +190,21 @@ export default function CategoriesPage() {
       >
         <Typography variant="h5">Categories</Typography>
 
-        <Button variant="contained" onClick={handleOpenCreate}>
-          Add Category
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button component="label" variant="outlined" disabled={isUploading}>
+            Upload Excel
+            <input
+              hidden
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+            />
+          </Button>
+
+          <Button variant="contained" onClick={handleOpenCreate}>
+            Add Category
+          </Button>
+        </Stack>
       </Stack>
 
       <Box sx={{ height: 500 }}>

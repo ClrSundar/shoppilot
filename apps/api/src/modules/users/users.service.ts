@@ -8,12 +8,75 @@ import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { getStringCell, parseExcelRows } from '../../common/utils/excel.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async bulkUpload(
+    tenantId: string,
+    actorRole: UserRole,
+    file: Express.Multer.File,
+  ) {
+    const rows = parseExcelRows(file);
+
+    let created = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const [index, row] of rows.entries()) {
+      const name = getStringCell(row, ['name', 'fullname']);
+      const email = getStringCell(row, ['email']);
+      const roleValue = getStringCell(row, ['role']).toUpperCase();
+      const password = getStringCell(row, ['password']);
+
+      if (!name || !email || !roleValue || !password) {
+        skipped += 1;
+        errors.push(
+          `Row ${index + 2}: name, email, role and password are required`,
+        );
+        continue;
+      }
+
+      const role = roleValue as UserRole;
+      if (!Object.values(UserRole).includes(role)) {
+        skipped += 1;
+        errors.push(`Row ${index + 2}: invalid role '${roleValue}'`);
+        continue;
+      }
+
+      if (password.length < 8) {
+        skipped += 1;
+        errors.push(`Row ${index + 2}: password must be at least 8 characters`);
+        continue;
+      }
+
+      try {
+        await this.createUser(tenantId, actorRole, {
+          name,
+          email,
+          role,
+          password,
+        });
+        created += 1;
+      } catch (error) {
+        skipped += 1;
+        const message =
+          error instanceof Error ? error.message : 'Failed to create user';
+        errors.push(`Row ${index + 2}: ${message}`);
+      }
+    }
+
+    return {
+      totalRows: rows.length,
+      created,
+      skipped,
+      errors,
+    };
+  }
 
   async getCurrentUser(userId: string) {
     const user = await this.prisma.user.findFirst({

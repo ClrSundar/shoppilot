@@ -10,6 +10,11 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  getNumberCell,
+  getStringCell,
+  parseExcelRows,
+} from '../../common/utils/excel.util';
 
 import { InitializeStockDto } from './dto/initialize-stock.dto';
 import { AdjustInventoryDto } from './dto/adjust-inventory.dto';
@@ -262,5 +267,102 @@ export class InventoryService {
       },
       take: 100,
     });
+  }
+
+  async bulkUpload(tenantId: string, userId: string, file: Express.Multer.File) {
+    const rows = parseExcelRows(file);
+
+    // Fetch all products for matching
+    const products = await this.prisma.product.findMany({
+      where: { tenantId, active: true },
+      select: { id: true, name: true, sku: true },
+    });
+
+    const productsByName = new Map(
+      products.map((p) => [p.name.toLowerCase(), p.id]),
+    );
+    const productsById = new Map(
+      products.map((p) => [p.id, p]),
+    );
+    const productsBySku = new Map(
+      products.filter((p) => p.sku).map((p) => [p.sku!.toLowerCase(), p.id]),
+    );
+
+    let initialized = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const [index, row] of rows.entries()) {
+      const productIdCell = getStringCell(row, ['productid']);
+      const productName = getStringCell(row, ['productname', 'product', 'name']);
+      const sku = getStringCell(row, ['sku']);
+      const openingStock = getNumberCell(row, ['openingstock', 'stock', 'quantity']);
+      const reorderLevel = getNumberCell(row, ['reorderlevel', 'minstock']);
+
+      if (openingStock === null) {
+        skipped += 1;
+        errors.push(
+          `Row ${index + 2}: Opening stock is required`,
+        );
+        continue;
+      }
+
+      let productId = '';
+
+      // Try to find product by ID first
+      if (productIdCell && productsById.has(productIdCell)) {
+        productId = productIdCell;
+      }
+      // Then by name
+      else if (productName) {
+        productId = productsByName.get(productName.toLowerCase()) ?? '';
+      }
+      // Then by SKU
+      else if (sku) {
+        productId = productsBySku.get(sku.toLowerCase()) ?? '';
+      }
+
+      if (!productId) {
+        skipped += 1;
+        errors.push(
+          `Row ${index + 2}: Product not found (provide productId, productName, or sku)`,
+        );
+        continue;
+      }
+
+      // Check if stock already initialized
+      const existingStock = await this.prisma.inventoryStock.findUnique({
+        where: {
+          tenantId_productId: {
+            tenantId,
+            productId,
+          },
+        },
+      });
+
+      if (existingStock) {
+        skipped += 1;
+        errors.push(
+          `Row ${index + 2}: Stock already initialized for this product`,
+        );
+        continue;
+      }
+
+      const stock = await this.initializeStock(tenantId, userId, {
+        productId,
+        openingStock,
+        reorderLevel: reorderLevel ?? 0,
+        note: `Bulk initialized stock`,
+      });
+
+      initialized += 1;
+    }
+
+    return {
+      totalRows: rows.length,
+      initialized,
+      skipped,
+      errors,
+    };
   }
 }

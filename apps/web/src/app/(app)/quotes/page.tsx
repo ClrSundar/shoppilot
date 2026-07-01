@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -22,6 +22,7 @@ import { Quote, quotesService } from '@/services/quotes.service';
 import { productsService } from '@/services/products.service';
 import { customersService } from '@/services/customers.service';
 import { inventoryService } from '@/services/inventory.service';
+import { agentsService } from '@/services/agents.service';
 import { Select, FormControl, InputLabel } from '@mui/material';
 import type { QuoteStatus } from '@/services/quotes.service';
 
@@ -40,13 +41,25 @@ export default function QuotesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [isEditingDraft, setIsEditingDraft] = useState(false);
 
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | QuoteStatus>('ALL');
+  const [agentFilter, setAgentFilter] = useState('ALL');
+  const [customerFilter, setCustomerFilter] = useState('ALL');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
   const [customerId, setCustomerId] = useState('');
+  const [agentId, setAgentId] = useState('');
+  const [agentCommissionPercentage, setAgentCommissionPercentage] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<QuoteDraftItem[]>([]);
 
   const [editCustomerId, setEditCustomerId] = useState('');
+  const [editAgentId, setEditAgentId] = useState('');
+  const [editAgentCommissionPercentage, setEditAgentCommissionPercentage] =
+    useState('');
   const [editProductId, setEditProductId] = useState('');
   const [editQuantity, setEditQuantity] = useState('1');
   const [editNotes, setEditNotes] = useState('');
@@ -73,6 +86,11 @@ export default function QuotesPage() {
     queryFn: productsService.getAll,
   });
 
+  const { data: agents = [] } = useQuery({
+    queryKey: ['agents'],
+    queryFn: agentsService.getAll,
+  });
+
   const { data: inventoryStocks = [] } = useQuery({
     queryKey: ['inventory', 'stocks'],
     queryFn: inventoryService.getStocks,
@@ -85,6 +103,8 @@ export default function QuotesPage() {
 
       setCreateOpen(false);
       setCustomerId('');
+      setAgentId('');
+      setAgentCommissionPercentage('');
       setProductId('');
       setQuantity('1');
       setNotes('');
@@ -122,6 +142,8 @@ export default function QuotesPage() {
       id: string;
       payload: {
         customerId: string;
+        agentId?: string;
+        agentCommissionPercentage?: number;
         notes?: string;
         items: {
           productId: string;
@@ -148,6 +170,12 @@ export default function QuotesPage() {
       headerName: 'Customer',
       flex: 1,
       valueGetter: (_value, row) => row.customer?.name,
+    },
+    {
+      field: 'agent',
+      headerName: 'Agent',
+      width: 180,
+      valueGetter: (_value, row) => row.agent?.name ?? '-',
     },
     { field: 'status', headerName: 'Status', width: 120 },
     { field: 'subtotal', headerName: 'Subtotal', width: 130 },
@@ -209,8 +237,22 @@ export default function QuotesPage() {
   };
 
   const handleCreateQuote = () => {
+    const parsedCommission = parseCommission(agentCommissionPercentage);
+
+    if (parsedCommission === null) {
+      showToast('Agent commission must be between 0 and 100', 'error');
+      return;
+    }
+
+    if (!agentId && parsedCommission !== undefined) {
+      showToast('Select an agent before setting commission percentage', 'error');
+      return;
+    }
+
     createMutation.mutate({
       customerId,
+      agentId: agentId || undefined,
+      agentCommissionPercentage: parsedCommission,
       items: items.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -225,6 +267,12 @@ export default function QuotesPage() {
     }
 
     setEditCustomerId(selectedQuote.customer.id);
+    setEditAgentId(selectedQuote.agentId ?? '');
+    setEditAgentCommissionPercentage(
+      selectedQuote.agentCommissionPercentage
+        ? String(Number(selectedQuote.agentCommissionPercentage))
+        : '',
+    );
     setEditNotes(selectedQuote.notes ?? '');
     setEditItems(
       (selectedQuote.items ?? []).map((item) => ({
@@ -328,10 +376,24 @@ export default function QuotesPage() {
       return;
     }
 
+    const parsedCommission = parseCommission(editAgentCommissionPercentage);
+
+    if (parsedCommission === null) {
+      showToast('Agent commission must be between 0 and 100', 'error');
+      return;
+    }
+
+    if (!editAgentId && parsedCommission !== undefined) {
+      showToast('Select an agent before setting commission percentage', 'error');
+      return;
+    }
+
     updateDraftMutation.mutate({
       id: selectedQuote.id,
       payload: {
         customerId: editCustomerId,
+        agentId: editAgentId || undefined,
+        agentCommissionPercentage: parsedCommission,
         notes: editNotes,
         items: editItems.map((item) => ({
           productId: item.productId,
@@ -347,6 +409,12 @@ export default function QuotesPage() {
     }
 
     setCustomerId(selectedQuote.customer.id);
+    setAgentId(selectedQuote.agentId ?? '');
+    setAgentCommissionPercentage(
+      selectedQuote.agentCommissionPercentage
+        ? String(Number(selectedQuote.agentCommissionPercentage))
+        : '',
+    );
     setNotes(selectedQuote.notes ?? '');
     setItems(
       (selectedQuote.items ?? []).map((item) => ({
@@ -410,6 +478,80 @@ export default function QuotesPage() {
     0,
   );
 
+  const parseCommission = (value: string) => {
+    if (!value.trim()) {
+      return undefined;
+    }
+
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+      return null;
+    }
+
+    return parsed;
+  };
+
+  const activeAgents = agents.filter((agent) => agent.active);
+
+  const filteredQuotes = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+
+    return quotes.filter((quote) => {
+      if (statusFilter !== 'ALL' && quote.status !== statusFilter) {
+        return false;
+      }
+
+      if (agentFilter !== 'ALL' && (quote.agentId ?? '') !== agentFilter) {
+        return false;
+      }
+
+      if (customerFilter !== 'ALL' && quote.customer.id !== customerFilter) {
+        return false;
+      }
+
+      const createdAtTime = new Date(quote.createdAt).getTime();
+
+      if (fromDate) {
+        const fromTime = new Date(`${fromDate}T00:00:00`).getTime();
+        if (createdAtTime < fromTime) {
+          return false;
+        }
+      }
+
+      if (toDate) {
+        const toTime = new Date(`${toDate}T23:59:59`).getTime();
+        if (createdAtTime > toTime) {
+          return false;
+        }
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        quote.quoteNumber,
+        quote.customer?.name,
+        quote.agent?.name,
+        quote.status,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [
+    quotes,
+    searchText,
+    statusFilter,
+    agentFilter,
+    customerFilter,
+    fromDate,
+    toDate,
+  ]);
+
   return (
     <Box>
       <Box
@@ -427,9 +569,101 @@ export default function QuotesPage() {
         </Button>
       </Box>
 
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={1}
+        sx={{ mb: 2, alignItems: { md: 'center' } }}
+      >
+        <TextField
+          label="Search"
+          placeholder="Quote no, customer, agent"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          sx={{ minWidth: 240 }}
+        />
+
+        <TextField
+          select
+          label="Status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'ALL' | QuoteStatus)}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="ALL">All</MenuItem>
+          <MenuItem value="DRAFT">Draft</MenuItem>
+          <MenuItem value="SENT">Sent</MenuItem>
+          <MenuItem value="APPROVED">Approved</MenuItem>
+          <MenuItem value="INVOICED">Invoiced</MenuItem>
+          <MenuItem value="DISPATCHED">Dispatched</MenuItem>
+          <MenuItem value="REJECTED">Rejected</MenuItem>
+          <MenuItem value="EXPIRED">Expired</MenuItem>
+          <MenuItem value="CANCELLED">Cancelled</MenuItem>
+        </TextField>
+
+        <TextField
+          select
+          label="Agent"
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="ALL">All</MenuItem>
+          {activeAgents.map((agent) => (
+            <MenuItem key={agent.id} value={agent.id}>
+              {agent.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        <TextField
+          select
+          label="Customer"
+          value={customerFilter}
+          onChange={(e) => setCustomerFilter(e.target.value)}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="ALL">All</MenuItem>
+          {customers.map((customer) => (
+            <MenuItem key={customer.id} value={customer.id}>
+              {customer.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        <TextField
+          label="From"
+          type="date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
+
+        <TextField
+          label="To"
+          type="date"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
+
+        <Button
+          variant="text"
+          onClick={() => {
+            setSearchText('');
+            setStatusFilter('ALL');
+            setAgentFilter('ALL');
+            setCustomerFilter('ALL');
+            setFromDate('');
+            setToDate('');
+          }}
+        >
+          Clear
+        </Button>
+      </Stack>
+
       <Box sx={{ height: 500 }}>
         <DataGrid
-          rows={quotes}
+          rows={filteredQuotes}
           columns={columns}
           loading={isLoading}
           getRowId={(row) => row.id}
@@ -467,6 +701,54 @@ export default function QuotesPage() {
                       </MenuItem>
                     ))}
                   </TextField>
+
+                  <TextField
+                    select
+                    label="Agent (Optional)"
+                    value={editAgentId}
+                    onChange={(e) => {
+                      const selectedAgentId = e.target.value;
+                      setEditAgentId(selectedAgentId);
+
+                      if (!selectedAgentId) {
+                        setEditAgentCommissionPercentage('');
+                        return;
+                      }
+
+                      const selectedAgent = activeAgents.find(
+                        (agent) => agent.id === selectedAgentId,
+                      );
+
+                      if (selectedAgent) {
+                        setEditAgentCommissionPercentage(
+                          String(Number(selectedAgent.defaultCommissionPercentage)),
+                        );
+                      }
+                    }}
+                    fullWidth
+                  >
+                    <MenuItem value="">No Agent</MenuItem>
+                    {activeAgents.map((agent) => (
+                      <MenuItem key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField
+                    label="Agent Commission %"
+                    type="number"
+                    value={editAgentCommissionPercentage}
+                    onChange={(e) => setEditAgentCommissionPercentage(e.target.value)}
+                    slotProps={{
+                      htmlInput: {
+                        min: 0,
+                        max: 100,
+                        step: 0.01,
+                      },
+                    }}
+                    fullWidth
+                  />
 
                   <TextField
                     select
@@ -570,6 +852,13 @@ export default function QuotesPage() {
               ) : (
                 <>
                   <Typography>Customer: {selectedQuote.customer.name}</Typography>
+                  <Typography sx={{ mt: 1 }}>
+                    Agent: {selectedQuote.agent?.name ?? 'Not assigned'}
+                  </Typography>
+                  <Typography sx={{ mt: 1 }}>
+                    Commission: {Number(selectedQuote.agentCommissionPercentage ?? 0).toFixed(2)}% (
+                    ₹{Number(selectedQuote.agentCommissionAmount ?? 0).toFixed(2)})
+                  </Typography>
                   {selectedQuote.notes && (
                     <Typography sx={{ mt: 1 }}>Notes: {selectedQuote.notes}</Typography>
                   )}
@@ -701,6 +990,8 @@ export default function QuotesPage() {
         open={createOpen}
         onClose={() => {
           setCreateOpen(false);
+          setAgentId('');
+          setAgentCommissionPercentage('');
           setNotes('');
         }}
         fullWidth
@@ -723,6 +1014,54 @@ export default function QuotesPage() {
                 </MenuItem>
               ))}
             </TextField>
+
+            <TextField
+              select
+              label="Agent (Optional)"
+              value={agentId}
+              onChange={(e) => {
+                const selectedAgentId = e.target.value;
+                setAgentId(selectedAgentId);
+
+                if (!selectedAgentId) {
+                  setAgentCommissionPercentage('');
+                  return;
+                }
+
+                const selectedAgent = activeAgents.find(
+                  (agent) => agent.id === selectedAgentId,
+                );
+
+                if (selectedAgent) {
+                  setAgentCommissionPercentage(
+                    String(Number(selectedAgent.defaultCommissionPercentage)),
+                  );
+                }
+              }}
+              fullWidth
+            >
+              <MenuItem value="">No Agent</MenuItem>
+              {activeAgents.map((agent) => (
+                <MenuItem key={agent.id} value={agent.id}>
+                  {agent.name}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              label="Agent Commission %"
+              type="number"
+              value={agentCommissionPercentage}
+              onChange={(e) => setAgentCommissionPercentage(e.target.value)}
+              slotProps={{
+                htmlInput: {
+                  min: 0,
+                  max: 100,
+                  step: 0.01,
+                },
+              }}
+              fullWidth
+            />
 
             <TextField
               select
@@ -812,6 +1151,8 @@ export default function QuotesPage() {
           <Button
             onClick={() => {
               setCreateOpen(false);
+              setAgentId('');
+              setAgentCommissionPercentage('');
               setNotes('');
             }}
           >

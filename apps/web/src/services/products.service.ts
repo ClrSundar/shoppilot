@@ -27,6 +27,13 @@ export type CreateProductPayload = {
 
 export type UpdateProductPayload = Partial<CreateProductPayload>;
 
+export type BulkUploadResult = {
+  totalRows: number;
+  created: number;
+  skipped: number;
+  errors: string[];
+};
+
 export const productsService = {
   getAll: async () => {
     const res = await api.get<Product[]>('/products');
@@ -45,6 +52,13 @@ export const productsService = {
 
   delete: async (id: string) => {
     const res = await api.delete<Product>(`/products/${id}`);
+    return res.data;
+  },
+
+  bulkUpload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post<BulkUploadResult>('/products/bulk-upload', formData);
     return res.data;
   },
 };

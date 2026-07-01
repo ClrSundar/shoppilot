@@ -5,9 +5,12 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/types/jwt-payload.type';
@@ -35,6 +38,15 @@ export class UsersController {
   @Post()
   createUser(@CurrentUser() user: JwtPayload, @Body() dto: CreateUserDto) {
     return this.usersService.createUser(user.tenantId, user.role, dto);
+  }
+
+  @Post('bulk-upload')
+  @UseInterceptors(FileInterceptor('file'))
+  bulkUpload(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.usersService.bulkUpload(user.tenantId, user.role, file);
   }
 
   @Patch(':id/role')

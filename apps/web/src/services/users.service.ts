@@ -16,6 +16,13 @@ export type CreateUserPayload = {
   password: string;
 };
 
+export type BulkUploadResult = {
+  totalRows: number;
+  created: number;
+  skipped: number;
+  errors: string[];
+};
+
 export const usersService = {
   getAll: async (): Promise<TeamUser[]> => {
     const res = await api.get('/users');
@@ -34,6 +41,13 @@ export const usersService = {
 
   toggleActive: async (id: string): Promise<TeamUser> => {
     const res = await api.patch(`/users/${id}/toggle-active`);
+    return res.data;
+  },
+
+  bulkUpload: async (file: File): Promise<BulkUploadResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post('/users/bulk-upload', formData);
     return res.data;
   },
 };

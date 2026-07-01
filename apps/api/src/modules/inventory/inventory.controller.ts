@@ -5,8 +5,11 @@ import {
   Param,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -30,6 +33,15 @@ export class InventoryController {
   @Post('stocks/initialize')
   initializeStock(@CurrentUser() user: JwtPayload, @Body() dto: InitializeStockDto) {
     return this.inventoryService.initializeStock(user.tenantId, user.sub, dto);
+  }
+
+  @Post('stocks/bulk-upload')
+  @UseInterceptors(FileInterceptor('file'))
+  bulkUpload(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.inventoryService.bulkUpload(user.tenantId, user.sub, file);
   }
 
   @Get('stocks')

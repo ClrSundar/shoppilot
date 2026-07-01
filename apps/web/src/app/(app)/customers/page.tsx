@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { ChangeEvent, useState } from 'react';
 import {
   Box,
   Button,
@@ -32,6 +32,7 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast, showToast, closeToast } = useAppToast();
 
   const { data: customers = [], isLoading } = useQuery({
@@ -110,6 +111,22 @@ export default function CustomersPage() {
     onError: () => showToast('Failed to delete customer', 'error'),
   });
 
+  const bulkUploadMutation = useMutation({
+    mutationFn: customersService.bulkUpload,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      showToast(
+        `Import complete: ${result.created} created, ${result.skipped} skipped`,
+        'success',
+      );
+      if (result.errors.length > 0) {
+        showToast(result.errors.slice(0, 3).join(' | '), 'error');
+      }
+    },
+    onError: () => showToast('Failed to upload customers Excel', 'error'),
+    onSettled: () => setIsUploading(false),
+  });
+
   const handleCloseDialog = () => {
     setOpen(false);
     setEditingCustomer(null);
@@ -173,6 +190,18 @@ export default function CustomersPage() {
     deleteMutation.mutate(deletingCustomer.id);
   };
 
+  const handleExcelUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    setIsUploading(true);
+    bulkUploadMutation.mutate(file);
+  };
+
   return (
     <Box>
       <Box
@@ -185,9 +214,21 @@ export default function CustomersPage() {
       >
         <Typography variant="h5">Customers</Typography>
 
-        <Button variant="contained" onClick={handleOpenCreate}>
-          Add Customer
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button component="label" variant="outlined" disabled={isUploading}>
+            Upload Excel
+            <input
+              hidden
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+            />
+          </Button>
+
+          <Button variant="contained" onClick={handleOpenCreate}>
+            Add Customer
+          </Button>
+        </Stack>
       </Box>
 
       <Box sx={{ height: 500 }}>

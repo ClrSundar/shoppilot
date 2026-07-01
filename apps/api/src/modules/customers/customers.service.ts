@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { getStringCell, parseExcelRows } from '../../common/utils/excel.util';
 
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -8,6 +9,46 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 @Injectable()
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async bulkUpload(tenantId: string, file: Express.Multer.File) {
+    const rows = parseExcelRows(file);
+
+    let created = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const [index, row] of rows.entries()) {
+      const name = getStringCell(row, ['name', 'customername', 'customer']);
+
+      if (!name) {
+        skipped += 1;
+        errors.push(`Row ${index + 2}: Name is required`);
+        continue;
+      }
+
+      await this.prisma.customer.create({
+        data: {
+          tenantId,
+          name,
+          phone: getStringCell(row, ['phone', 'phonenumber']) || undefined,
+          whatsappNumber:
+            getStringCell(row, ['whatsappnumber', 'whatsapp']) || undefined,
+          email: getStringCell(row, ['email']) || undefined,
+          address: getStringCell(row, ['address']) || undefined,
+          gstNumber: getStringCell(row, ['gstnumber', 'gst']) || undefined,
+        },
+      });
+
+      created += 1;
+    }
+
+    return {
+      totalRows: rows.length,
+      created,
+      skipped,
+      errors,
+    };
+  }
 
   async create(tenantId: string, dto: CreateCustomerDto) {
     return this.prisma.customer.create({

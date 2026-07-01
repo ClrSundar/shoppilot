@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { ChangeEvent, useState } from 'react';
 import {
   Box,
   Button,
@@ -38,6 +38,7 @@ export default function ProductsPage() {
   const [sellingPrice, setSellingPrice] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast, showToast, closeToast } = useAppToast();
 
   const { data: products = [], isLoading } = useQuery({
@@ -85,6 +86,22 @@ export default function ProductsPage() {
       showToast('Product deleted successfully', 'success');
     },
     onError: () => showToast('Failed to delete product', 'error'),
+  });
+
+  const bulkUploadMutation = useMutation({
+    mutationFn: productsService.bulkUpload,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      showToast(
+        `Import complete: ${result.created} created, ${result.skipped} skipped`,
+        'success',
+      );
+      if (result.errors.length > 0) {
+        showToast(result.errors.slice(0, 3).join(' | '), 'error');
+      }
+    },
+    onError: () => showToast('Failed to upload products Excel', 'error'),
+    onSettled: () => setIsUploading(false),
   });
 
   const columns: GridColDef<Product>[] = [
@@ -189,6 +206,18 @@ export default function ProductsPage() {
     createMutation.mutate(payload);
   };
 
+  const handleExcelUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    setIsUploading(true);
+    bulkUploadMutation.mutate(file);
+  };
+
   return (
     <Box>
       <Box
@@ -201,9 +230,21 @@ export default function ProductsPage() {
       >
         <Typography variant="h5">Products</Typography>
 
-        <Button variant="contained" onClick={handleOpenCreate}>
-          Add Product
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button component="label" variant="outlined" disabled={isUploading}>
+            Upload Excel
+            <input
+              hidden
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+            />
+          </Button>
+
+          <Button variant="contained" onClick={handleOpenCreate}>
+            Add Product
+          </Button>
+        </Stack>
       </Box>
 
       <Box sx={{ height: 500 }}>

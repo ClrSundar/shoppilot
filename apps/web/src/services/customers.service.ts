@@ -20,6 +20,13 @@ export type CreateCustomerPayload = {
   gstNumber?: string;
 };
 
+export type BulkUploadResult = {
+  totalRows: number;
+  created: number;
+  skipped: number;
+  errors: string[];
+};
+
 export const customersService = {
   getAll: async () => {
     const res = await api.get<Customer[]>('/customers');
@@ -38,6 +45,13 @@ export const customersService = {
 
   delete: async (id: string) => {
     const res = await api.delete<Customer>(`/customers/${id}`);
+    return res.data;
+  },
+
+  bulkUpload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post<BulkUploadResult>('/customers/bulk-upload', formData);
     return res.data;
   },
 };

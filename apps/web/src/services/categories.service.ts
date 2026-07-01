@@ -17,6 +17,13 @@ export type CreateCategoryPayload = {
 
 export type UpdateCategoryPayload = Partial<CreateCategoryPayload>;
 
+export type BulkUploadResult = {
+  totalRows: number;
+  created: number;
+  skipped: number;
+  errors: string[];
+};
+
 export const categoriesService = {
   getAll: async () => {
     const res = await api.get<Category[]>('/categories');
@@ -35,6 +42,13 @@ export const categoriesService = {
 
   delete: async (id: string) => {
     const res = await api.delete<Category>(`/categories/${id}`);
+    return res.data;
+  },
+
+  bulkUpload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post<BulkUploadResult>('/categories/bulk-upload', formData);
     return res.data;
   },
 };
