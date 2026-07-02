@@ -14,6 +14,8 @@ export type Product = {
     id: string;
     name: string;
   };
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CreateProductPayload = {
@@ -34,9 +36,25 @@ export type BulkUploadResult = {
   errors: string[];
 };
 
+export type ArchivedProduct = Product & {
+  stock: {
+    id: string;
+    onHand: string;
+    reserved: string;
+    reorderLevel: string;
+    active: boolean;
+    updatedAt: string;
+  } | null;
+};
+
 export const productsService = {
   getAll: async () => {
     const res = await api.get<Product[]>('/products');
+    return res.data;
+  },
+
+  getArchived: async () => {
+    const res = await api.get<ArchivedProduct[]>('/products/archived');
     return res.data;
   },
 
@@ -52,6 +70,11 @@ export const productsService = {
 
   delete: async (id: string) => {
     const res = await api.delete<Product>(`/products/${id}`);
+    return res.data;
+  },
+
+  restore: async (id: string) => {
+    const res = await api.post<Product>(`/products/${id}/restore`);
     return res.data;
   },
 

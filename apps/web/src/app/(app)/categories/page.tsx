@@ -1,13 +1,16 @@
 'use client';
 
-import { ChangeEvent, useState } from 'react';
+import { ChangeEvent, useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Stack,
   TextField,
   Typography,
@@ -18,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppToast } from '@/components/common/AppToast';
 import { useAppToast } from '@/hooks/use-app-toast';
 import {
+  ArchivedCategory,
   categoriesService,
   Category,
   UpdateCategoryPayload,
@@ -33,11 +37,17 @@ export default function CategoriesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [showArchivedWithStockOnly, setShowArchivedWithStockOnly] = useState(false);
   const { toast, showToast, closeToast } = useAppToast();
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['categories'],
     queryFn: categoriesService.getAll,
+  });
+
+  const { data: archivedCategories = [], isLoading: archivedLoading } = useQuery({
+    queryKey: ['categories', 'archived'],
+    queryFn: categoriesService.getArchived,
   });
 
   const createMutation = useMutation({
@@ -65,11 +75,27 @@ export default function CategoriesPage() {
     mutationFn: categoriesService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories', 'archived'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['products', 'archived'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
       setDeleteDialogOpen(false);
       setDeletingCategory(null);
       showToast('Category deleted successfully', 'success');
     },
     onError: () => showToast('Failed to delete category', 'error'),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: categoriesService.restore,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories', 'archived'] });
+      showToast('Category restored successfully', 'success');
+    },
+    onError: (error: any) => {
+      showToast(error?.response?.data?.message ?? 'Failed to restore category', 'error');
+    },
   });
 
   const bulkUploadMutation = useMutation({
@@ -113,6 +139,62 @@ export default function CategoriesPage() {
       ),
     },
   ];
+
+  const archivedColumns: GridColDef<ArchivedCategory>[] = [
+    { field: 'name', headerName: 'Category', flex: 1 },
+    {
+      field: 'productsCount',
+      headerName: 'Products',
+      width: 110,
+    },
+    {
+      field: 'onHand',
+      headerName: 'On Hand',
+      width: 110,
+      valueGetter: (_value, row) => row.stockSummary.onHand,
+    },
+    {
+      field: 'reserved',
+      headerName: 'Reserved',
+      width: 110,
+      valueGetter: (_value, row) => row.stockSummary.reserved,
+    },
+    {
+      field: 'available',
+      headerName: 'Available',
+      width: 120,
+      valueGetter: (_value, row) => row.stockSummary.available,
+    },
+    {
+      field: 'archivedAt',
+      headerName: 'Archived',
+      width: 180,
+      valueGetter: (_value, row) => new Date(row.updatedAt).toLocaleString(),
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 130,
+      renderCell: (params) => (
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => restoreMutation.mutate(params.row.id)}
+          disabled={restoreMutation.isPending}
+        >
+          Restore
+        </Button>
+      ),
+    },
+  ];
+
+  const filteredArchivedCategories = useMemo(() => {
+    if (!showArchivedWithStockOnly) {
+      return archivedCategories;
+    }
+
+    return archivedCategories.filter((category) => category.stockSummary.onHand > 0);
+  }, [archivedCategories, showArchivedWithStockOnly]);
 
   const handleCloseDialog = () => {
     setOpen(false);
@@ -212,6 +294,35 @@ export default function CategoriesPage() {
           rows={data}
           columns={columns}
           loading={isLoading}
+          getRowId={(row) => row.id}
+          disableRowSelectionOnClick
+        />
+      </Box>
+
+      <Typography variant="h6" sx={{ mt: 4, mb: 1 }}>
+        Archived Categories
+      </Typography>
+
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Restoring a category makes it available for future use. Products stay archived until you restore them from Products.
+      </Alert>
+
+      <FormControlLabel
+        sx={{ mb: 1 }}
+        control={(
+          <Checkbox
+            checked={showArchivedWithStockOnly}
+            onChange={(event) => setShowArchivedWithStockOnly(event.target.checked)}
+          />
+        )}
+        label="Show only items with stock > 0"
+      />
+
+      <Box sx={{ height: 340 }}>
+        <DataGrid
+          rows={filteredArchivedCategories}
+          columns={archivedColumns}
+          loading={archivedLoading}
           getRowId={(row) => row.id}
           disableRowSelectionOnClick
         />

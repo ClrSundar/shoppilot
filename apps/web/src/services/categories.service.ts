@@ -24,9 +24,24 @@ export type BulkUploadResult = {
   errors: string[];
 };
 
+export type ArchivedCategory = Category & {
+  productsCount: number;
+  activeProductsCount: number;
+  stockSummary: {
+    onHand: number;
+    reserved: number;
+    available: number;
+  };
+};
+
 export const categoriesService = {
   getAll: async () => {
     const res = await api.get<Category[]>('/categories');
+    return res.data;
+  },
+
+  getArchived: async () => {
+    const res = await api.get<ArchivedCategory[]>('/categories/archived');
     return res.data;
   },
 
@@ -42,6 +57,11 @@ export const categoriesService = {
 
   delete: async (id: string) => {
     const res = await api.delete<Category>(`/categories/${id}`);
+    return res.data;
+  },
+
+  restore: async (id: string) => {
+    const res = await api.post<Category>(`/categories/${id}/restore`);
     return res.data;
   },
 

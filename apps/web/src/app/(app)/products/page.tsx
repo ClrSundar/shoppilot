@@ -1,13 +1,16 @@
 'use client';
 
-import { ChangeEvent, useState } from 'react';
+import { ChangeEvent, useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
   TextField,
@@ -20,6 +23,7 @@ import { AppToast } from '@/components/common/AppToast';
 import { useAppToast } from '@/hooks/use-app-toast';
 import { categoriesService } from '@/services/categories.service';
 import {
+  ArchivedProduct,
   Product,
   productsService,
   UpdateProductPayload,
@@ -39,11 +43,17 @@ export default function ProductsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [showArchivedWithStockOnly, setShowArchivedWithStockOnly] = useState(false);
   const { toast, showToast, closeToast } = useAppToast();
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products'],
     queryFn: productsService.getAll,
+  });
+
+  const { data: archivedProducts = [], isLoading: archivedLoading } = useQuery({
+    queryKey: ['products', 'archived'],
+    queryFn: productsService.getArchived,
   });
 
   const { data: categories = [] } = useQuery({
@@ -81,11 +91,25 @@ export default function ProductsPage() {
     mutationFn: productsService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['products', 'archived'] });
       setDeleteDialogOpen(false);
       setDeletingProduct(null);
       showToast('Product deleted successfully', 'success');
     },
     onError: () => showToast('Failed to delete product', 'error'),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: productsService.restore,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['products', 'archived'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      showToast('Product restored successfully', 'success');
+    },
+    onError: (error: any) => {
+      showToast(error?.response?.data?.message ?? 'Failed to restore product', 'error');
+    },
   });
 
   const bulkUploadMutation = useMutation({
@@ -137,6 +161,72 @@ export default function ProductsPage() {
       ),
     },
   ];
+
+  const archivedColumns: GridColDef<ArchivedProduct>[] = [
+    { field: 'name', headerName: 'Product', flex: 1 },
+    {
+      field: 'category',
+      headerName: 'Category',
+      flex: 1,
+      valueGetter: (_value, row) => row.category?.name,
+    },
+    {
+      field: 'onHand',
+      headerName: 'On Hand',
+      width: 110,
+      valueGetter: (_value, row) => Number(row.stock?.onHand ?? 0),
+    },
+    {
+      field: 'reserved',
+      headerName: 'Reserved',
+      width: 110,
+      valueGetter: (_value, row) => Number(row.stock?.reserved ?? 0),
+    },
+    {
+      field: 'available',
+      headerName: 'Available',
+      width: 120,
+      valueGetter: (_value, row) =>
+        Number(row.stock?.onHand ?? 0) - Number(row.stock?.reserved ?? 0),
+    },
+    {
+      field: 'reorderLevel',
+      headerName: 'Reorder Level',
+      width: 130,
+      valueGetter: (_value, row) => Number(row.stock?.reorderLevel ?? 0),
+    },
+    {
+      field: 'archivedAt',
+      headerName: 'Archived',
+      width: 180,
+      valueGetter: (_value, row) => new Date(row.updatedAt).toLocaleString(),
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 130,
+      renderCell: (params) => (
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => restoreMutation.mutate(params.row.id)}
+          disabled={restoreMutation.isPending}
+        >
+          Restore
+        </Button>
+      ),
+    },
+  ];
+
+  const filteredArchivedProducts = useMemo(() => {
+    if (!showArchivedWithStockOnly) {
+      return archivedProducts;
+    }
+
+    return archivedProducts.filter(
+      (product) => Number(product.stock?.onHand ?? 0) > 0,
+    );
+  }, [archivedProducts, showArchivedWithStockOnly]);
 
   const handleCloseDialog = () => {
     setOpen(false);
@@ -252,6 +342,35 @@ export default function ProductsPage() {
           rows={products}
           columns={columns}
           loading={isLoading}
+          getRowId={(row) => row.id}
+          disableRowSelectionOnClick
+        />
+      </Box>
+
+      <Typography variant="h6" sx={{ mt: 4, mb: 1 }}>
+        Archived Product Stocks
+      </Typography>
+
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Archived products keep their stock. Restore them anytime to make them sellable again.
+      </Alert>
+
+      <FormControlLabel
+        sx={{ mb: 1 }}
+        control={(
+          <Checkbox
+            checked={showArchivedWithStockOnly}
+            onChange={(event) => setShowArchivedWithStockOnly(event.target.checked)}
+          />
+        )}
+        label="Show only items with stock > 0"
+      />
+
+      <Box sx={{ height: 360 }}>
+        <DataGrid
+          rows={filteredArchivedProducts}
+          columns={archivedColumns}
+          loading={archivedLoading}
           getRowId={(row) => row.id}
           disableRowSelectionOnClick
         />

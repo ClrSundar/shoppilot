@@ -179,6 +179,40 @@ export class ProductsService {
     });
   }
 
+  async findArchived(tenantId: string) {
+    const archivedProducts = await this.prisma.product.findMany({
+      where: {
+        tenantId,
+        active: false,
+      },
+      include: {
+        category: true,
+        inventoryStocks: {
+          select: {
+            id: true,
+            onHand: true,
+            reserved: true,
+            reorderLevel: true,
+            active: true,
+            updatedAt: true,
+          },
+          orderBy: {
+            updatedAt: 'desc',
+          },
+          take: 1,
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return archivedProducts.map(({ inventoryStocks, ...product }) => ({
+      ...product,
+      stock: inventoryStocks[0] || null,
+    }));
+  }
+
   async findOne(tenantId: string, productId: string) {
     const product = await this.prisma.product.findFirst({
       where: {
@@ -234,6 +268,53 @@ export class ProductsService {
     });
   }
 
+  async restore(tenantId: string, id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+      include: {
+        category: true,
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    if (!product.category.active) {
+      throw new BadRequestException(
+        'Cannot restore product because its category is inactive',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.inventoryStock.updateMany({
+        where: {
+          tenantId,
+          productId: id,
+        },
+        data: {
+          active: true,
+        },
+      });
+
+      return tx.product.update({
+        where: {
+          id,
+          tenantId,
+        },
+        data: {
+          active: true,
+        },
+        include: {
+          category: true,
+        },
+      });
+    });
+  }
+
   async remove(tenantId: string, id: string) {
     const product = await this.prisma.product.findFirst({
       where: {
@@ -246,17 +327,29 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    return this.prisma.product.update({
-      where: {
-        id,
-        tenantId,
-      },
-      data: {
-        active: false,
-      },
-      include: {
-        category: true,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.inventoryStock.updateMany({
+        where: {
+          tenantId,
+          productId: id,
+        },
+        data: {
+          active: false,
+        },
+      });
+
+      return tx.product.update({
+        where: {
+          id,
+          tenantId,
+        },
+        data: {
+          active: false,
+        },
+        include: {
+          category: true,
+        },
+      });
     });
   }
 }

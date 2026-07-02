@@ -48,6 +48,11 @@ export class CategoriesController {
     return this.categoriesService.findAll(user.tenantId);
   }
 
+  @Get('archived')
+  findArchived(@CurrentUser() user: JwtPayload) {
+    return this.categoriesService.findArchived(user.tenantId);
+  }
+
   @Put(':id')
   update(
     @CurrentUser() user: JwtPayload,
@@ -55,6 +60,11 @@ export class CategoriesController {
     @Body() dto: UpdateCategoryDto,
   ) {
     return this.categoriesService.update(user.tenantId, id, dto);
+  }
+
+  @Post(':id/restore')
+  restore(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.categoriesService.restore(user.tenantId, id);
   }
 
   @Delete(':id')

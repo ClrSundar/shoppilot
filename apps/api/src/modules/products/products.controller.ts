@@ -49,6 +49,11 @@ export class ProductsController {
     return this.productsService.findAll(user.tenantId);
   }
 
+  @Get('archived')
+  findArchived(@CurrentUser() user: JwtPayload) {
+    return this.productsService.findArchived(user.tenantId);
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.productsService.findOne(user.tenantId, id);
@@ -61,6 +66,11 @@ export class ProductsController {
     @Body() dto: UpdateProductDto,
   ) {
     return this.productsService.update(user.tenantId, id, dto);
+  }
+
+  @Post(':id/restore')
+  restore(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.productsService.restore(user.tenantId, id);
   }
 
   @Delete(':id')

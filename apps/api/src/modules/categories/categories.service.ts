@@ -93,6 +93,55 @@ export class CategoriesService {
     });
   }
 
+  async findArchived(tenantId: string) {
+    const categories = await this.prisma.productCategory.findMany({
+      where: {
+        tenantId,
+        active: false,
+      },
+      include: {
+        products: {
+          select: {
+            id: true,
+            active: true,
+            inventoryStocks: {
+              select: {
+                onHand: true,
+                reserved: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return categories.map(({ products, ...category }) => {
+      let totalOnHand = 0;
+      let totalReserved = 0;
+
+      for (const product of products) {
+        for (const stock of product.inventoryStocks) {
+          totalOnHand += Number(stock.onHand);
+          totalReserved += Number(stock.reserved);
+        }
+      }
+
+      return {
+        ...category,
+        productsCount: products.length,
+        activeProductsCount: products.filter((product) => product.active).length,
+        stockSummary: {
+          onHand: totalOnHand,
+          reserved: totalReserved,
+          available: totalOnHand - totalReserved,
+        },
+      };
+    });
+  }
+
   async update(tenantId: string, id: string, dto: UpdateCategoryDto) {
     return this.prisma.productCategory.update({
       where: {
@@ -103,7 +152,7 @@ export class CategoriesService {
     });
   }
 
-  async remove(tenantId: string, id: string) {
+  async restore(tenantId: string, id: string) {
     const category = await this.prisma.productCategory.findFirst({
       where: {
         id,
@@ -121,8 +170,69 @@ export class CategoriesService {
         tenantId,
       },
       data: {
-        active: false,
+        active: true,
       },
+    });
+  }
+
+  async remove(tenantId: string, id: string) {
+    const category = await this.prisma.productCategory.findFirst({
+      where: {
+        id,
+        tenantId,
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Category not found');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const products = await tx.product.findMany({
+        where: {
+          tenantId,
+          categoryId: id,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      const productIds = products.map((product) => product.id);
+
+      await tx.product.updateMany({
+        where: {
+          tenantId,
+          categoryId: id,
+        },
+        data: {
+          active: false,
+        },
+      });
+
+      if (productIds.length > 0) {
+        await tx.inventoryStock.updateMany({
+          where: {
+            tenantId,
+            productId: {
+              in: productIds,
+            },
+          },
+          data: {
+            active: false,
+          },
+        });
+      }
+
+      return tx.productCategory.update({
+        where: {
+          id,
+          tenantId,
+        },
+        data: {
+          active: false,
+        },
+      });
     });
   }
 }
