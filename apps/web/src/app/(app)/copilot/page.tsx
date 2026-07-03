@@ -19,13 +19,16 @@ import { useMutation } from '@tanstack/react-query';
 
 import { AppToast } from '@/components/common/AppToast';
 import { useAppToast } from '@/hooks/use-app-toast';
-import { CopilotToolCall, copilotService } from '@/services/copilot.service';
+import {
+  CopilotToolCall as _CopilotToolCall,
+  PreviousMessage,
+  copilotService,
+} from '@/services/copilot.service';
 
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  toolCalls?: CopilotToolCall[];
   requiresConfirmation?: boolean;
 };
 
@@ -48,7 +51,13 @@ export default function CopilotPage() {
   );
 
   const chatMutation = useMutation({
-    mutationFn: (message: string) => copilotService.chat(message, sessionId),
+    mutationFn: (message: string) => {
+      const context: PreviousMessage[] = messages.slice(-8).map((m) => ({
+        role: m.role,
+        text: m.text,
+      }));
+      return copilotService.chat(message, context, sessionId);
+    },
     onSuccess: (data, message) => {
       setMessages((prev) => [
         ...prev,
@@ -61,7 +70,6 @@ export default function CopilotPage() {
           id: `a-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           role: 'assistant',
           text: data.reply,
-          toolCalls: data.toolCalls,
           requiresConfirmation: data.requiresConfirmation,
         },
       ]);
@@ -171,22 +179,6 @@ export default function CopilotPage() {
                       {message.role === 'user' ? 'You' : 'Copilot'}
                     </Typography>
                     <Typography variant="body2">{message.text}</Typography>
-
-                    {message.toolCalls && message.toolCalls.length > 0 ? (
-                      <>
-                        <Divider sx={{ my: 1, opacity: 0.5 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                          Tool calls
-                        </Typography>
-                        <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-                          {message.toolCalls.map((tool, index) => (
-                            <Typography key={`${message.id}-tool-${index}`} variant="caption">
-                              - {tool.tool}: {tool.resultSummary}
-                            </Typography>
-                          ))}
-                        </Stack>
-                      </>
-                    ) : null}
 
                     {message.requiresConfirmation ? (
                       <Chip

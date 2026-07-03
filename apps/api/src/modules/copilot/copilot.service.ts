@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { PreviousMessageDto } from './dto/copilot-chat.dto';
 
 type CopilotToolCall = {
   tool: string;
@@ -35,8 +36,23 @@ type AccessoryRecommendation = {
 export class CopilotService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async chat(tenantId: string, message: string): Promise<CopilotChatResponse> {
+  async chat(
+    tenantId: string,
+    message: string,
+    previousMessages: PreviousMessageDto[] = [],
+  ): Promise<CopilotChatResponse> {
     const lowerMessage = message.toLowerCase();
+
+    // --- Context-aware follow-up: affirmative after a borewell/motor response ---
+    if (this.isAffirmative(lowerMessage) && previousMessages.length > 0) {
+      const lastAssistantText = [...previousMessages]
+        .reverse()
+        .find((m) => m.role === 'assistant')?.text ?? '';
+
+      if (this.looksLikeBorewellContext(lastAssistantText)) {
+        return this.buildDraftQuoteProposal(tenantId, lastAssistantText);
+      }
+    }
 
     if (this.looksLikeWriteIntent(lowerMessage)) {
       return {
@@ -58,6 +74,91 @@ export class CopilotService {
     }
 
     return this.handleBusinessInsight(tenantId, lowerMessage);
+  }
+
+  private isAffirmative(lowerMessage: string): boolean {
+    const affirmatives = ['yes', 'yes please', 'sure', 'ok', 'okay', 'proceed', 'go ahead', 'please', 'do it', 'confirm'];
+    const trimmed = lowerMessage.trim();
+    return affirmatives.some((a) => trimmed === a || trimmed.startsWith(a + ' '));
+  }
+
+  private looksLikeBorewellContext(assistantText: string): boolean {
+    const lower = assistantText.toLowerCase();
+    return (
+      lower.includes('borewell') ||
+      lower.includes('motor') ||
+      lower.includes('submersible') ||
+      lower.includes('1.5 hp') ||
+      lower.includes('accessories oriented')
+    );
+  }
+
+  private async buildDraftQuoteProposal(
+    tenantId: string,
+    lastAssistantText: string,
+  ): Promise<CopilotChatResponse> {
+    // Pull depth from last assistant text if available
+    const depthMatch = lastAssistantText.match(/(\d+(?:\.\d+)?)\s*ft\b/i);
+    const depth = depthMatch ? Number(depthMatch[1]) : 320;
+
+    const allProducts = await this.prisma.product.findMany({
+      where: { tenantId, active: true },
+      include: { category: { select: { name: true } } },
+      take: 500,
+    });
+
+    const hp = this.recommendedHp(depth);
+    const motors = this.selectMotors(allProducts, hp);
+    const accessories = this.selectAccessories(allProducts, depth);
+
+    const motorItem = motors[0] ?? null;
+    const accessorySubtotal = accessories.reduce((s, i) => s + i.total, 0);
+    const grandTotal = accessorySubtotal + (motorItem?.price ?? 0);
+
+    const lines: string[] = [
+      `Here is the draft quote for a ${depth} ft borewell installation:`,
+      '',
+    ];
+
+    if (motorItem) {
+      lines.push(`Motor: ${motorItem.name} — Rs ${motorItem.price.toFixed(2)}`);
+    } else {
+      lines.push('Motor: No matching motor found in catalog. Add it manually.');
+    }
+
+    if (accessories.length > 0) {
+      lines.push('');
+      lines.push('Accessories:');
+      accessories.forEach((item, i) => {
+        lines.push(
+          `  ${i + 1}) ${item.name}  x ${item.quantity}  @ Rs ${item.price.toFixed(2)}  = Rs ${item.total.toFixed(2)}`,
+        );
+      });
+      lines.push(`  Accessories subtotal: Rs ${accessorySubtotal.toFixed(2)}`);
+    }
+
+    lines.push('');
+    lines.push(`Grand Total (est.): Rs ${grandTotal.toFixed(2)}`);
+    lines.push('');
+    lines.push('To create this as a quote, reply: create quote customer=<Name>');
+
+    return {
+      reply: lines.join('\n'),
+      toolCalls: [],
+      requiresConfirmation: false,
+      proposedAction: {
+        type: 'DRAFT_QUOTE',
+        payload: {
+          depth,
+          motorProductId: motorItem?.id ?? null,
+          accessories: accessories.map((a) => ({
+            productId: a.id,
+            quantity: a.quantity,
+          })),
+          estimatedTotal: grandTotal,
+        },
+      },
+    };
   }
 
   private looksLikeWriteIntent(lowerMessage: string): boolean {

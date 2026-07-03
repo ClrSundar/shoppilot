@@ -17,6 +17,6 @@ export class CopilotController {
 
   @Post('chat')
   chat(@CurrentUser() user: JwtPayload, @Body() dto: CopilotChatDto) {
-    return this.copilotService.chat(user.tenantId, dto.message);
+    return this.copilotService.chat(user.tenantId, dto.message, dto.previousMessages ?? []);
   }
 }

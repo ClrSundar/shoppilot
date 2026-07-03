@@ -15,10 +15,20 @@ export type CopilotChatResponse = {
   };
 };
 
+export type PreviousMessage = {
+  role: 'user' | 'assistant';
+  text: string;
+};
+
 export const copilotService = {
-  chat: async (message: string, sessionId?: string) => {
+  chat: async (
+    message: string,
+    previousMessages: PreviousMessage[] = [],
+    sessionId?: string,
+  ) => {
     const res = await api.post<CopilotChatResponse>('/copilot/chat', {
       message,
+      previousMessages,
       sessionId,
     });
 
