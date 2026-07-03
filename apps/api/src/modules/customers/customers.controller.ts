@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { MergeCustomersDto } from './dto/merge-customers.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import type { JwtPayload } from '../../common/types/jwt-payload.type';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -38,9 +39,18 @@ export class CustomersController {
   @UseInterceptors(FileInterceptor('file'))
   bulkUpload(
     @CurrentUser() user: JwtPayload,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
   ) {
     return this.customersService.bulkUpload(user.tenantId, file);
+  }
+
+  @Post('merge')
+  merge(@CurrentUser() user: JwtPayload, @Body() dto: MergeCustomersDto) {
+    return this.customersService.mergeCustomers(
+      user.tenantId,
+      dto.sourceCustomerId,
+      dto.targetCustomerId,
+    );
   }
 
   @Get()

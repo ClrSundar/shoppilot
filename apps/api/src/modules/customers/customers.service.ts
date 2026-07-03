@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { getStringCell, parseExcelRows } from '../../common/utils/excel.util';
@@ -10,7 +14,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async bulkUpload(tenantId: string, file: Express.Multer.File) {
+  async bulkUpload(tenantId: string, file: any) {
     const rows = parseExcelRows(file);
 
     let created = 0;
@@ -123,5 +127,120 @@ export class CustomersService {
         active: false,
       },
     });
+  }
+
+  async mergeCustomers(
+    tenantId: string,
+    sourceCustomerId: string,
+    targetCustomerId: string,
+  ) {
+    if (sourceCustomerId === targetCustomerId) {
+      throw new BadRequestException('Source and target customers must differ');
+    }
+
+    const [source, target] = await Promise.all([
+      this.prisma.customer.findFirst({
+        where: {
+          id: sourceCustomerId,
+          tenantId,
+        },
+      }),
+      this.prisma.customer.findFirst({
+        where: {
+          id: targetCustomerId,
+          tenantId,
+        },
+      }),
+    ]);
+
+    if (!source) {
+      throw new NotFoundException('Source customer not found');
+    }
+
+    if (!target) {
+      throw new NotFoundException('Target customer not found');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const quoteResult = await tx.quote.updateMany({
+        where: {
+          tenantId,
+          customerId: sourceCustomerId,
+        },
+        data: {
+          customerId: targetCustomerId,
+        },
+      });
+
+      const prismaWithWhatsApp = tx as unknown as {
+        whatsAppConversation: {
+          updateMany(args: {
+            where: {
+              tenantId: string;
+              customerId: string;
+            };
+            data: {
+              customerId: string;
+            };
+          }): Promise<{ count: number }>;
+        };
+        whatsAppMessage: {
+          updateMany(args: {
+            where: {
+              tenantId: string;
+              customerId: string;
+            };
+            data: {
+              customerId: string;
+            };
+          }): Promise<{ count: number }>;
+        };
+      };
+
+      const [conversationResult, messageResult] = await Promise.all([
+        prismaWithWhatsApp.whatsAppConversation.updateMany({
+          where: {
+            tenantId,
+            customerId: sourceCustomerId,
+          },
+          data: {
+            customerId: targetCustomerId,
+          },
+        }),
+        prismaWithWhatsApp.whatsAppMessage.updateMany({
+          where: {
+            tenantId,
+            customerId: sourceCustomerId,
+          },
+          data: {
+            customerId: targetCustomerId,
+          },
+        }),
+      ]);
+
+      await tx.customer.update({
+        where: {
+          id: sourceCustomerId,
+          tenantId,
+        },
+        data: {
+          active: false,
+          name: `${source.name} (merged)`,
+        },
+      });
+
+      return {
+        quotesMoved: quoteResult.count,
+        conversationsMoved: conversationResult.count,
+        messagesMoved: messageResult.count,
+      };
+    });
+
+    return {
+      success: true,
+      sourceCustomerId,
+      targetCustomerId,
+      ...result,
+    };
   }
 }

@@ -36,6 +36,7 @@ model Tenant {
   agents       Agent[]
   quotes       Quote[]
   whatsappConversations WhatsAppConversation[]
+  whatsappMessages WhatsAppMessage[]
   subscription  Subscription?
   featureOverrides TenantFeatureOverride[]
   usageCounters UsageCounter[]
@@ -316,6 +317,8 @@ model Customer {
   active          Boolean  @default(true)
 
   quotes          Quote[]
+  whatsappConversations WhatsAppConversation[]
+  whatsappMessages WhatsAppMessage[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -388,11 +391,19 @@ enum WhatsAppIntent {
   CREATE_QUOTE
 }
 
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
 model WhatsAppConversation {
   id            String          @id @default(uuid())
 
   tenantId      String
   tenant        Tenant          @relation(fields: [tenantId], references: [id])
+
+  customerId    String?
+  customer      Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   senderPhone   String
 
@@ -403,11 +414,40 @@ model WhatsAppConversation {
   lastMessage   String?
   lastResponse  String?
 
+  messages      WhatsAppMessage[]
+
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   @@index([tenantId, senderPhone])
+  @@index([tenantId, updatedAt])
+  @@index([tenantId, customerId])
   @@unique([tenantId, senderPhone])
+}
+
+model WhatsAppMessage {
+  id                String                   @id @default(uuid())
+
+  tenantId          String
+  tenant            Tenant                   @relation(fields: [tenantId], references: [id])
+
+  conversationId    String
+  conversation      WhatsAppConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  customerId        String?
+  customer          Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  externalMessageId String?
+  senderPhone       String
+  messageBody       String
+  direction         WhatsAppMessageDirection
+
+  createdAt         DateTime                 @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, senderPhone])
+  @@index([conversationId])
+  @@index([customerId])
 }
 
 model Quote {
