@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+import { QuotesModule } from '../quotes/quotes.module';
 
 import { CopilotController } from './copilot.controller';
 import { CopilotService } from './copilot.service';
 
 @Module({
+  imports: [QuotesModule],
   controllers: [CopilotController],
   providers: [CopilotService],
   exports: [CopilotService],

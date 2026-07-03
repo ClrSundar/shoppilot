@@ -10,17 +10,19 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { AppToast } from '@/components/common/AppToast';
 import { useAppToast } from '@/hooks/use-app-toast';
+import { customersService } from '@/services/customers.service';
 import {
-  CopilotToolCall as _CopilotToolCall,
+  DraftQuotePreview,
   PreviousMessage,
   copilotService,
 } from '@/services/copilot.service';
@@ -29,6 +31,11 @@ type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  draftQuote?: DraftQuotePreview | null;
+  proposedAction?: null | {
+    type: string;
+    payload: Record<string, unknown>;
+  };
   requiresConfirmation?: boolean;
 };
 
@@ -44,6 +51,12 @@ export default function CopilotPage() {
 
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers'],
+    queryFn: customersService.getAll,
+  });
 
   const sessionId = useMemo(
     () => `session-${Math.random().toString(36).slice(2, 10)}`,
@@ -70,6 +83,8 @@ export default function CopilotPage() {
           id: `a-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           role: 'assistant',
           text: data.reply,
+          draftQuote: data.draftQuote,
+          proposedAction: data.proposedAction,
           requiresConfirmation: data.requiresConfirmation,
         },
       ]);
@@ -99,6 +114,53 @@ export default function CopilotPage() {
 
     chatMutation.mutate(message);
   };
+
+  const confirmDraftMutation = useMutation({
+    mutationFn: (message: ChatMessage) => {
+      if (!selectedCustomerId) {
+        throw new Error('Please select a customer before confirming the quote.');
+      }
+
+      const payload = message.proposedAction?.payload as
+        | {
+            motorProductId?: string | null;
+            accessories?: Array<{ productId: string; quantity: number }>;
+            depth?: number;
+            recommendedHp?: string;
+          }
+        | undefined;
+
+      if (!payload) {
+        throw new Error('Draft payload missing. Please regenerate the draft.');
+      }
+
+      return copilotService.confirmDraft({
+        customerId: selectedCustomerId,
+        motorProductId: payload.motorProductId ?? undefined,
+        accessories: payload.accessories ?? [],
+        depth: payload.depth,
+        recommendedHp: payload.recommendedHp,
+      });
+    },
+    onSuccess: (data) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a-confirm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          role: 'assistant',
+          text: `Quote created successfully: ${data.quoteNumber} (Rs ${data.totalAmount.toFixed(2)}) for ${data.customer.name}.`,
+        },
+      ]);
+      showToast('Draft confirmed and quote created', 'success');
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to confirm draft quote. Please try again.';
+      showToast(message, 'error');
+    },
+  });
 
   return (
     <Box>
@@ -179,6 +241,66 @@ export default function CopilotPage() {
                       {message.role === 'user' ? 'You' : 'Copilot'}
                     </Typography>
                     <Typography variant="body2">{message.text}</Typography>
+
+                    {message.draftQuote ? (
+                      <Box
+                        sx={{
+                          mt: 1.2,
+                          p: 1.25,
+                          borderRadius: 1.5,
+                          bgcolor: 'rgba(255,255,255,0.55)',
+                          color: 'text.primary',
+                        }}
+                      >
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          Draft Quote Preview
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
+                          Depth: {message.draftQuote.depth} ft | Recommended HP: {message.draftQuote.recommendedHp}
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block' }}>
+                          Items: {message.draftQuote.itemCount} | Motor: Rs {message.draftQuote.motorSubtotal.toFixed(2)} | Accessories: Rs {message.draftQuote.accessorySubtotal.toFixed(2)}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5 }}>
+                          Estimated Total: Rs {message.draftQuote.estimatedTotal.toFixed(2)}
+                        </Typography>
+
+                        {message.draftQuote.items.slice(0, 6).map((item, index) => (
+                          <Typography key={`${message.id}-draft-item-${index}`} variant="caption" sx={{ display: 'block' }}>
+                            {index + 1}) {item.name} x {item.quantity} = Rs {item.lineTotal.toFixed(2)}
+                          </Typography>
+                        ))}
+
+                        {message.proposedAction?.type === 'DRAFT_QUOTE' ? (
+                          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mt: 1 }}>
+                            <TextField
+                              select
+                              size="small"
+                              value={selectedCustomerId}
+                              onChange={(event) => setSelectedCustomerId(event.target.value)}
+                              sx={{ minWidth: 240, bgcolor: 'white' }}
+                              label="Select Customer"
+                            >
+                              {customers.map((customer) => (
+                                <MenuItem key={customer.id} value={customer.id}>
+                                  {customer.name}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              disabled={confirmDraftMutation.isPending}
+                              onClick={() => confirmDraftMutation.mutate(message)}
+                            >
+                              {confirmDraftMutation.isPending
+                                ? 'Creating...'
+                                : 'Confirm and Create Quote'}
+                            </Button>
+                          </Stack>
+                        ) : null}
+                      </Box>
+                    ) : null}
 
                     {message.requiresConfirmation ? (
                       <Chip

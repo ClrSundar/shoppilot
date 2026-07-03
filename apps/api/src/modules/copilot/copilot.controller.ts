@@ -6,6 +6,7 @@ import type { JwtPayload } from '../../common/types/jwt-payload.type';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { CopilotChatDto } from './dto/copilot-chat.dto';
+import { ConfirmDraftQuoteDto } from './dto/confirm-draft-quote.dto';
 import { CopilotService } from './copilot.service';
 
 @ApiTags('Copilot')
@@ -18,5 +19,13 @@ export class CopilotController {
   @Post('chat')
   chat(@CurrentUser() user: JwtPayload, @Body() dto: CopilotChatDto) {
     return this.copilotService.chat(user.tenantId, dto.message, dto.previousMessages ?? []);
+  }
+
+  @Post('confirm-draft')
+  confirmDraft(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ConfirmDraftQuoteDto,
+  ) {
+    return this.copilotService.confirmDraftQuote(user.tenantId, dto);
   }
 }

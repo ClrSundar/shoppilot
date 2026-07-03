@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { QuotesService } from '../quotes/quotes.service';
+import { ConfirmDraftQuoteDto } from './dto/confirm-draft-quote.dto';
 import { PreviousMessageDto } from './dto/copilot-chat.dto';
 
 type CopilotToolCall = {
@@ -12,10 +14,28 @@ type CopilotChatResponse = {
   reply: string;
   toolCalls: CopilotToolCall[];
   requiresConfirmation: boolean;
+  draftQuote: DraftQuotePreview | null;
   proposedAction: null | {
     type: string;
     payload: Record<string, unknown>;
   };
+};
+
+type DraftQuotePreview = {
+  depth: number;
+  recommendedHp: string;
+  itemCount: number;
+  motorSubtotal: number;
+  accessorySubtotal: number;
+  estimatedTotal: number;
+  items: Array<{
+    productId: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+    kind: 'MOTOR' | 'ACCESSORY';
+  }>;
 };
 
 type MotorRecommendation = {
@@ -34,7 +54,10 @@ type AccessoryRecommendation = {
 
 @Injectable()
 export class CopilotService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly quotesService: QuotesService,
+  ) {}
 
   async chat(
     tenantId: string,
@@ -66,6 +89,7 @@ export class CopilotService {
             originalMessage: message,
           },
         },
+        draftQuote: null,
       };
     }
 
@@ -113,7 +137,31 @@ export class CopilotService {
 
     const motorItem = motors[0] ?? null;
     const accessorySubtotal = accessories.reduce((s, i) => s + i.total, 0);
-    const grandTotal = accessorySubtotal + (motorItem?.price ?? 0);
+    const motorSubtotal = motorItem?.price ?? 0;
+    const grandTotal = accessorySubtotal + motorSubtotal;
+
+    const draftItems: DraftQuotePreview['items'] = [
+      ...(motorItem
+        ? [
+            {
+              productId: motorItem.id,
+              name: motorItem.name,
+              quantity: 1,
+              unitPrice: motorItem.price,
+              lineTotal: motorItem.price,
+              kind: 'MOTOR' as const,
+            },
+          ]
+        : []),
+      ...accessories.map((item) => ({
+        productId: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        lineTotal: item.total,
+        kind: 'ACCESSORY' as const,
+      })),
+    ];
 
     const lines: string[] = [
       `Here is the draft quote for a ${depth} ft borewell installation:`,
@@ -145,7 +193,16 @@ export class CopilotService {
     return {
       reply: lines.join('\n'),
       toolCalls: [],
-      requiresConfirmation: false,
+      requiresConfirmation: true,
+      draftQuote: {
+        depth,
+        recommendedHp: hp,
+        itemCount: draftItems.length,
+        motorSubtotal,
+        accessorySubtotal,
+        estimatedTotal: grandTotal,
+        items: draftItems,
+      },
       proposedAction: {
         type: 'DRAFT_QUOTE',
         payload: {
@@ -157,6 +214,57 @@ export class CopilotService {
           })),
           estimatedTotal: grandTotal,
         },
+      },
+    };
+  }
+
+  async confirmDraftQuote(tenantId: string, dto: ConfirmDraftQuoteDto) {
+    const accessories = dto.accessories ?? [];
+
+    const items = [
+      ...(dto.motorProductId
+        ? [
+            {
+              productId: dto.motorProductId,
+              quantity: 1,
+            },
+          ]
+        : []),
+      ...accessories.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      })),
+    ];
+
+    if (items.length === 0) {
+      throw new BadRequestException('No items found in draft quote confirmation');
+    }
+
+    const notes = dto.notes?.trim().length
+      ? dto.notes
+      : [
+          'Generated via Copilot draft confirmation',
+          dto.depth ? `Depth: ${dto.depth} ft` : null,
+          dto.recommendedHp ? `Recommended HP: ${dto.recommendedHp}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | ');
+
+    const quote = await this.quotesService.create(tenantId, {
+      customerId: dto.customerId,
+      items,
+      notes,
+    });
+
+    return {
+      success: true,
+      quoteId: quote.id,
+      quoteNumber: quote.quoteNumber,
+      status: quote.status,
+      totalAmount: Number(quote.totalAmount),
+      customer: {
+        id: quote.customer.id,
+        name: quote.customer.name,
       },
     };
   }
@@ -220,6 +328,7 @@ export class CopilotService {
         reply: `You currently have ${pendingQuotes} quotes pending action (DRAFT or SENT).`,
         toolCalls,
         requiresConfirmation: false,
+        draftQuote: null,
         proposedAction: null,
       };
     }
@@ -229,6 +338,7 @@ export class CopilotService {
         reply: `You currently have ${workers} active team members.`,
         toolCalls,
         requiresConfirmation: false,
+        draftQuote: null,
         proposedAction: null,
       };
     }
@@ -245,6 +355,7 @@ export class CopilotService {
       ].join('\n'),
       toolCalls,
       requiresConfirmation: false,
+      draftQuote: null,
       proposedAction: null,
     };
   }
@@ -261,6 +372,7 @@ export class CopilotService {
           'Please share the borewell depth in feet (for example: 320ft) so I can recommend the right motor and accessories.',
         toolCalls: [],
         requiresConfirmation: false,
+        draftQuote: null,
         proposedAction: null,
       };
     }
@@ -330,6 +442,7 @@ export class CopilotService {
       ].join('\n\n'),
       toolCalls,
       requiresConfirmation: false,
+      draftQuote: null,
       proposedAction: null,
     };
   }
