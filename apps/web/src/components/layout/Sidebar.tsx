@@ -18,6 +18,7 @@ const navigationItems = [
   { href: '/customers', label: 'Customers', icon: '☺' },
   { href: '/agents', label: 'Agents', icon: '♢' },
   { href: '/quotes', label: 'Quotes', icon: '✎' },
+  { href: '/copilot', label: 'Copilot', icon: '⚑' },
   { href: '/team', label: 'Team', icon: '⟡' },
   { href: '/billing', label: 'Billing', icon: '$' },
 ];

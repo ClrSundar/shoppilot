@@ -18,6 +18,7 @@ import { FeatureGuard } from './common/guards/feature.guard';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { UnifiedBulkUploadModule } from './modules/unified-bulk-upload/unified-bulk-upload.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { CopilotModule } from './modules/copilot/copilot.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AgentsModule } from './modules/agents/agents.module';
     InventoryModule,
     UnifiedBulkUploadModule,
     AgentsModule,
+    CopilotModule,
   ],
   providers: [
     {
