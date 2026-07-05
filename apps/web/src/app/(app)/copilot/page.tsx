@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -21,6 +21,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { AppToast } from '@/components/common/AppToast';
 import { useAppToast } from '@/hooks/use-app-toast';
 import { customersService } from '@/services/customers.service';
+import { productsService } from '@/services/products.service';
 import {
   DraftQuotePreview,
   PreviousMessage,
@@ -36,6 +37,7 @@ type ChatMessage = {
     type: string;
     payload: Record<string, unknown>;
   };
+  confirmationToken?: string;
   requiresConfirmation?: boolean;
 };
 
@@ -46,22 +48,131 @@ const starterPrompts = [
   'I have a borewell of depth 320ft what motor should i use and accessories needed',
 ];
 
+function normalizeDraftQuote(draft: DraftQuotePreview): DraftQuotePreview {
+  const items = draft.items.map((item) => {
+    const quantity = Number(item.quantity);
+    const unitPrice = Number(item.unitPrice);
+
+    return {
+      ...item,
+      quantity,
+      unitPrice,
+      lineTotal: Number((quantity * unitPrice).toFixed(2)),
+    };
+  });
+
+  const motorSubtotal = Number(
+    items
+      .filter((item) => item.kind === 'MOTOR')
+      .reduce((sum, item) => sum + item.lineTotal, 0)
+      .toFixed(2),
+  );
+  const accessorySubtotal = Number(
+    items
+      .filter((item) => item.kind === 'ACCESSORY')
+      .reduce((sum, item) => sum + item.lineTotal, 0)
+      .toFixed(2),
+  );
+
+  return {
+    ...draft,
+    items,
+    itemCount: items.length,
+    motorSubtotal,
+    accessorySubtotal,
+    estimatedTotal: Number((motorSubtotal + accessorySubtotal).toFixed(2)),
+  };
+}
+
 export default function CopilotPage() {
   const { toast, showToast, closeToast } = useAppToast();
 
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [sessionId, setSessionId] = useState<string>('');
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [selectedCustomerByMessage, setSelectedCustomerByMessage] =
+    useState<Record<string, string>>({});
+  const [draftEdits, setDraftEdits] = useState<Record<string, DraftQuotePreview>>({});
+  const [draftAdditions, setDraftAdditions] = useState<
+    Record<string, { productId: string; quantity: string }>
+  >({});
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
     queryFn: customersService.getAll,
   });
 
-  const sessionId = useMemo(
-    () => `session-${Math.random().toString(36).slice(2, 10)}`,
-    [],
-  );
+  const { data: products = [] } = useQuery({
+    queryKey: ['products'],
+    queryFn: productsService.getAll,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const restoreSession = async () => {
+      try {
+        const latest = await copilotService.getLatestSession();
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (latest.sessionId) {
+          setSessionId(latest.sessionId);
+        }
+
+        if (latest.messages.length > 0) {
+          const restoredMessages: ChatMessage[] = latest.messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            text: message.text,
+            draftQuote: message.metadata?.draftQuote,
+            proposedAction: message.metadata?.proposedAction,
+            confirmationToken: message.metadata?.confirmationToken,
+            requiresConfirmation: message.metadata?.requiresConfirmation,
+          }));
+
+          setMessages(restoredMessages);
+
+          const restoredDrafts: Record<string, DraftQuotePreview> = {};
+          const restoredCustomers: Record<string, string> = {};
+
+          restoredMessages.forEach((message) => {
+            if (message.draftQuote) {
+              restoredDrafts[message.id] = normalizeDraftQuote(message.draftQuote);
+
+              if (message.draftQuote.suggestedCustomerId) {
+                restoredCustomers[message.id] =
+                  message.draftQuote.suggestedCustomerId;
+              }
+            }
+          });
+
+          if (Object.keys(restoredDrafts).length > 0) {
+            setDraftEdits(restoredDrafts);
+          }
+
+          if (Object.keys(restoredCustomers).length > 0) {
+            setSelectedCustomerByMessage(restoredCustomers);
+          }
+        }
+      } catch {
+        // Ignore restore errors; user can still start a fresh session.
+      } finally {
+        if (isMounted) {
+          setSessionLoaded(true);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const chatMutation = useMutation({
     mutationFn: (message: string) => {
@@ -69,25 +180,56 @@ export default function CopilotPage() {
         role: m.role,
         text: m.text,
       }));
-      return copilotService.chat(message, context, sessionId);
+      return copilotService.chat(message, context, sessionId || undefined);
     },
     onSuccess: (data, message) => {
+      if (!sessionId && data.sessionId) {
+        setSessionId(data.sessionId);
+      }
+
+      const userId = `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const assistantId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
       setMessages((prev) => [
         ...prev,
         {
-          id: `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: userId,
           role: 'user',
           text: message,
         },
         {
-          id: `a-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          id: assistantId,
           role: 'assistant',
           text: data.reply,
           draftQuote: data.draftQuote,
           proposedAction: data.proposedAction,
+          confirmationToken: data.confirmationToken,
           requiresConfirmation: data.requiresConfirmation,
         },
       ]);
+
+      if (data.draftQuote) {
+        const normalized = normalizeDraftQuote(data.draftQuote);
+
+        setDraftEdits((prev) => ({
+          ...prev,
+          [assistantId]: normalized,
+        }));
+
+        setDraftAdditions((prev) => ({
+          ...prev,
+          [assistantId]: {
+            productId: '',
+            quantity: '1',
+          },
+        }));
+
+        setSelectedCustomerByMessage((prev) => ({
+          ...prev,
+          [assistantId]: data.draftQuote?.suggestedCustomerId ?? '',
+        }));
+      }
+
       setInput('');
     },
     onError: () => {
@@ -100,7 +242,7 @@ export default function CopilotPage() {
 
     const message = input.trim();
 
-    if (!message || chatMutation.isPending) {
+    if (!message || chatMutation.isPending || !sessionLoaded) {
       return;
     }
 
@@ -108,38 +250,235 @@ export default function CopilotPage() {
   };
 
   const runStarterPrompt = (message: string) => {
-    if (chatMutation.isPending) {
+    if (chatMutation.isPending || !sessionLoaded) {
       return;
     }
 
     chatMutation.mutate(message);
   };
 
+  const getEffectiveDraft = (message: ChatMessage) => {
+    if (!message.draftQuote) {
+      return null;
+    }
+
+    return draftEdits[message.id] ?? message.draftQuote;
+  };
+
+  const handleDraftRemoveItem = (messageId: string, index: number) => {
+    setDraftEdits((prev) => {
+      const current = prev[messageId];
+
+      if (!current) {
+        return prev;
+      }
+
+      const nextItems = current.items.filter((_, itemIndex) => itemIndex !== index);
+
+      return {
+        ...prev,
+        [messageId]: normalizeDraftQuote({
+          ...current,
+          items: nextItems,
+        }),
+      };
+    });
+  };
+
+  const handleDraftQuantityChange = (
+    messageId: string,
+    index: number,
+    quantityInput: string,
+  ) => {
+    setDraftEdits((prev) => {
+      const current = prev[messageId];
+
+      if (!current) {
+        return prev;
+      }
+
+      const qty = Number(quantityInput);
+
+      if (!Number.isFinite(qty) || qty <= 0) {
+        return prev;
+      }
+
+      const nextItems = current.items.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              quantity: qty,
+              lineTotal: Number((qty * item.unitPrice).toFixed(2)),
+            }
+          : item,
+      );
+
+      return {
+        ...prev,
+        [messageId]: normalizeDraftQuote({
+          ...current,
+          items: nextItems,
+        }),
+      };
+    });
+  };
+
+  const handleDraftReplaceProduct = (
+    messageId: string,
+    index: number,
+    productId: string,
+  ) => {
+    const selectedProduct = products.find((product) => product.id === productId);
+
+    if (!selectedProduct) {
+      return;
+    }
+
+    setDraftEdits((prev) => {
+      const current = prev[messageId];
+
+      if (!current) {
+        return prev;
+      }
+
+      const nextItems = current.items.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+
+        const unitPrice = Number(selectedProduct.sellingPrice);
+
+        return {
+          ...item,
+          productId: selectedProduct.id,
+          name: selectedProduct.name,
+          unitPrice,
+          lineTotal: Number((item.quantity * unitPrice).toFixed(2)),
+        };
+      });
+
+      return {
+        ...prev,
+        [messageId]: normalizeDraftQuote({
+          ...current,
+          items: nextItems,
+        }),
+      };
+    });
+  };
+
+  const handleDraftAdditionChange = (
+    messageId: string,
+    field: 'productId' | 'quantity',
+    value: string,
+  ) => {
+    setDraftAdditions((prev) => ({
+      ...prev,
+      [messageId]: {
+        productId: prev[messageId]?.productId ?? '',
+        quantity: prev[messageId]?.quantity ?? '1',
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleDraftAddItem = (messageId: string) => {
+    const addition = draftAdditions[messageId];
+
+    if (!addition?.productId) {
+      showToast('Select a product to add', 'error');
+      return;
+    }
+
+    const qty = Number(addition.quantity);
+
+    if (!Number.isFinite(qty) || qty <= 0) {
+      showToast('Quantity must be greater than 0', 'error');
+      return;
+    }
+
+    const selectedProduct = products.find((product) => product.id === addition.productId);
+
+    if (!selectedProduct) {
+      showToast('Selected product not found', 'error');
+      return;
+    }
+
+    setDraftEdits((prev) => {
+      const current = prev[messageId];
+
+      if (!current) {
+        return prev;
+      }
+
+      const unitPrice = Number(selectedProduct.sellingPrice);
+      const nextItems = [
+        ...current.items,
+        {
+          productId: selectedProduct.id,
+          name: selectedProduct.name,
+          quantity: qty,
+          unitPrice,
+          lineTotal: Number((qty * unitPrice).toFixed(2)),
+          kind: 'ACCESSORY' as const,
+        },
+      ];
+
+      return {
+        ...prev,
+        [messageId]: normalizeDraftQuote({
+          ...current,
+          items: nextItems,
+        }),
+      };
+    });
+
+    setDraftAdditions((prev) => ({
+      ...prev,
+      [messageId]: {
+        productId: '',
+        quantity: '1',
+      },
+    }));
+  };
+
   const confirmDraftMutation = useMutation({
     mutationFn: (message: ChatMessage) => {
+      const selectedCustomerId = selectedCustomerByMessage[message.id] ?? '';
+
       if (!selectedCustomerId) {
         throw new Error('Please select a customer before confirming the quote.');
       }
 
-      const payload = message.proposedAction?.payload as
-        | {
-            motorProductId?: string | null;
-            accessories?: Array<{ productId: string; quantity: number }>;
-            depth?: number;
-            recommendedHp?: string;
-          }
-        | undefined;
+      const effectiveDraft = getEffectiveDraft(message);
 
-      if (!payload) {
+      if (!effectiveDraft) {
         throw new Error('Draft payload missing. Please regenerate the draft.');
       }
 
+      const motorItem = effectiveDraft.items.find((item) => item.kind === 'MOTOR');
+      const accessories = effectiveDraft.items
+        .filter((item) => item.kind === 'ACCESSORY')
+        .map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        }));
+
+      const confirmationToken = message.confirmationToken;
+
+      if (!confirmationToken) {
+        throw new Error('Confirmation token missing. Please regenerate the draft.');
+      }
+
       return copilotService.confirmDraft({
+        sessionId,
+        confirmationToken,
+        idempotencyKey: message.id,
         customerId: selectedCustomerId,
-        motorProductId: payload.motorProductId ?? undefined,
-        accessories: payload.accessories ?? [],
-        depth: payload.depth,
-        recommendedHp: payload.recommendedHp,
+        motorProductId: motorItem?.productId,
+        accessories,
+        depth: effectiveDraft.depth,
+        recommendedHp: effectiveDraft.recommendedHp,
       });
     },
     onSuccess: (data) => {
@@ -148,10 +487,17 @@ export default function CopilotPage() {
         {
           id: `a-confirm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           role: 'assistant',
-          text: `Quote created successfully: ${data.quoteNumber} (Rs ${data.totalAmount.toFixed(2)}) for ${data.customer.name}.`,
+          text: data.idempotentReplay
+            ? `Quote already confirmed earlier: ${data.quoteNumber} (Rs ${data.totalAmount.toFixed(2)}) for ${data.customer.name}.`
+            : `Quote created successfully: ${data.quoteNumber} (Rs ${data.totalAmount.toFixed(2)}) for ${data.customer.name}.`,
         },
       ]);
-      showToast('Draft confirmed and quote created', 'success');
+      showToast(
+        data.idempotentReplay
+          ? 'Already confirmed earlier. Reused existing quote.'
+          : 'Draft confirmed and quote created',
+        'success',
+      );
     },
     onError: (error: unknown) => {
       const message =
@@ -161,6 +507,13 @@ export default function CopilotPage() {
       showToast(message, 'error');
     },
   });
+
+  const handleDraftCustomerChange = (messageId: string, customerId: string) => {
+    setSelectedCustomerByMessage((prev) => ({
+      ...prev,
+      [messageId]: customerId,
+    }));
+  };
 
   return (
     <Box>
@@ -255,29 +608,173 @@ export default function CopilotPage() {
                         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                           Draft Quote Preview
                         </Typography>
-                        <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
-                          Depth: {message.draftQuote.depth} ft | Recommended HP: {message.draftQuote.recommendedHp}
-                        </Typography>
-                        <Typography variant="caption" sx={{ display: 'block' }}>
-                          Items: {message.draftQuote.itemCount} | Motor: Rs {message.draftQuote.motorSubtotal.toFixed(2)} | Accessories: Rs {message.draftQuote.accessorySubtotal.toFixed(2)}
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5 }}>
-                          Estimated Total: Rs {message.draftQuote.estimatedTotal.toFixed(2)}
-                        </Typography>
+                        {(() => {
+                          const effectiveDraft = getEffectiveDraft(message);
 
-                        {message.draftQuote.items.slice(0, 6).map((item, index) => (
-                          <Typography key={`${message.id}-draft-item-${index}`} variant="caption" sx={{ display: 'block' }}>
-                            {index + 1}) {item.name} x {item.quantity} = Rs {item.lineTotal.toFixed(2)}
-                          </Typography>
-                        ))}
+                          if (!effectiveDraft) {
+                            return null;
+                          }
+
+                          const addition = draftAdditions[message.id] ?? {
+                            productId: '',
+                            quantity: '1',
+                          };
+
+                          return (
+                            <>
+                              <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
+                                Depth: {effectiveDraft.depth} ft | Recommended HP: {effectiveDraft.recommendedHp}
+                              </Typography>
+                              <Typography variant="caption" sx={{ display: 'block' }}>
+                                Items: {effectiveDraft.itemCount} | Motor: Rs {effectiveDraft.motorSubtotal.toFixed(2)} | Accessories: Rs {effectiveDraft.accessorySubtotal.toFixed(2)}
+                              </Typography>
+                              {effectiveDraft.suggestedCustomerName ? (
+                                <Typography variant="caption" sx={{ display: 'block' }}>
+                                  Suggested customer: {effectiveDraft.suggestedCustomerName}
+                                </Typography>
+                              ) : null}
+                              <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5 }}>
+                                Estimated Total: Rs {effectiveDraft.estimatedTotal.toFixed(2)}
+                              </Typography>
+
+                              <Stack spacing={0.8} sx={{ mt: 0.8 }}>
+                                {effectiveDraft.items.map((item, index) => (
+                                  <Stack
+                                    key={`${message.id}-draft-item-${index}`}
+                                    direction={{ xs: 'column', md: 'row' }}
+                                    spacing={0.8}
+                                  >
+                                    <TextField
+                                      select
+                                      size="small"
+                                      value={item.productId}
+                                      onChange={(event) =>
+                                        handleDraftReplaceProduct(
+                                          message.id,
+                                          index,
+                                          event.target.value,
+                                        )
+                                      }
+                                      sx={{ minWidth: 240, bgcolor: 'white' }}
+                                    >
+                                      {products.map((product) => (
+                                        <MenuItem key={product.id} value={product.id}>
+                                          {product.name}
+                                        </MenuItem>
+                                      ))}
+                                    </TextField>
+
+                                    <TextField
+                                      size="small"
+                                      type="number"
+                                      label="Qty"
+                                      value={item.quantity}
+                                      onChange={(event) =>
+                                        handleDraftQuantityChange(
+                                          message.id,
+                                          index,
+                                          event.target.value,
+                                        )
+                                      }
+                                      sx={{ width: 96, bgcolor: 'white' }}
+                                      slotProps={{
+                                        htmlInput: {
+                                          min: 0.01,
+                                          step: 0.01,
+                                        },
+                                      }}
+                                    />
+
+                                    <Typography
+                                      variant="caption"
+                                      sx={{ display: 'flex', alignItems: 'center', minWidth: 140 }}
+                                    >
+                                      Rs {item.lineTotal.toFixed(2)}
+                                    </Typography>
+
+                                    <Button
+                                      size="small"
+                                      color="error"
+                                      variant="outlined"
+                                      onClick={() => handleDraftRemoveItem(message.id, index)}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </Stack>
+                                ))}
+                              </Stack>
+
+                              <Stack
+                                direction={{ xs: 'column', md: 'row' }}
+                                spacing={0.8}
+                                sx={{ mt: 1 }}
+                              >
+                                <TextField
+                                  select
+                                  size="small"
+                                  value={addition.productId}
+                                  onChange={(event) =>
+                                    handleDraftAdditionChange(
+                                      message.id,
+                                      'productId',
+                                      event.target.value,
+                                    )
+                                  }
+                                  sx={{ minWidth: 240, bgcolor: 'white' }}
+                                  label="Add Product"
+                                >
+                                  {products.map((product) => (
+                                    <MenuItem key={product.id} value={product.id}>
+                                      {product.name}
+                                    </MenuItem>
+                                  ))}
+                                </TextField>
+
+                                <TextField
+                                  size="small"
+                                  type="number"
+                                  label="Qty"
+                                  value={addition.quantity}
+                                  onChange={(event) =>
+                                    handleDraftAdditionChange(
+                                      message.id,
+                                      'quantity',
+                                      event.target.value,
+                                    )
+                                  }
+                                  sx={{ width: 96, bgcolor: 'white' }}
+                                  slotProps={{
+                                    htmlInput: {
+                                      min: 0.01,
+                                      step: 0.01,
+                                    },
+                                  }}
+                                />
+
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => handleDraftAddItem(message.id)}
+                                >
+                                  Add Item
+                                </Button>
+                              </Stack>
+                            </>
+                          );
+                        })()}
 
                         {message.proposedAction?.type === 'DRAFT_QUOTE' ? (
                           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mt: 1 }}>
                             <TextField
                               select
                               size="small"
-                              value={selectedCustomerId}
-                              onChange={(event) => setSelectedCustomerId(event.target.value)}
+                              value={selectedCustomerByMessage[message.id] ?? ''}
+                              onChange={(event) =>
+                                handleDraftCustomerChange(
+                                  message.id,
+                                  event.target.value,
+                                )
+                              }
                               sx={{ minWidth: 240, bgcolor: 'white' }}
                               label="Select Customer"
                             >
@@ -290,7 +787,11 @@ export default function CopilotPage() {
                             <Button
                               size="small"
                               variant="contained"
-                              disabled={confirmDraftMutation.isPending}
+                              disabled={
+                                confirmDraftMutation.isPending ||
+                                !sessionId ||
+                                !message.confirmationToken
+                              }
                               onClick={() => confirmDraftMutation.mutate(message)}
                             >
                               {confirmDraftMutation.isPending
@@ -329,7 +830,11 @@ export default function CopilotPage() {
               <Button
                 type="submit"
                 variant="contained"
-                disabled={chatMutation.isPending || input.trim().length === 0}
+                disabled={
+                  chatMutation.isPending ||
+                  input.trim().length === 0 ||
+                  !sessionLoaded
+                }
                 sx={{ minWidth: 120 }}
               >
                 {chatMutation.isPending ? <CircularProgress size={20} color="inherit" /> : 'Send'}

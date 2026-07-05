@@ -37,9 +37,13 @@ model Tenant {
   quotes       Quote[]
   whatsappConversations WhatsAppConversation[]
   whatsappMessages WhatsAppMessage[]
+  copilotSessions CopilotSession[]
+  copilotMessages CopilotMessage[]
+  copilotDraftConfirmations CopilotDraftConfirmation[]
   subscription  Subscription?
   featureOverrides TenantFeatureOverride[]
   usageCounters UsageCounter[]
+  recommendationRuns RecommendationRun[]
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -197,6 +201,12 @@ model User {
 
   active    Boolean  @default(true)
 
+  copilotSessions CopilotSession[]
+  copilotMessages CopilotMessage[]
+  copilotDraftConfirmations CopilotDraftConfirmation[]
+  recommendationRuns RecommendationRun[]
+  recommendationFeedbacks RecommendationFeedback[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -278,24 +288,99 @@ model Product {
 
   brand         String?
 
+  description   String?
+
   unit          String   @default("NOS")
 
   costPrice     Decimal  @db.Decimal(12,2)
   sellingPrice  Decimal  @db.Decimal(12,2)
 
+  gstRate       Decimal? @db.Decimal(5,2)
+
+  barcode       String?
+
   imageUrl      String?
+
+  metadata      Json?
 
   active        Boolean  @default(true)
 
   quoteItems    QuoteItem[]
   inventoryStocks InventoryStock[]
   inventoryLedgerEntries InventoryLedgerEntry[]
+  attributeValues ProductAttributeValue[]
+  sourceCompatibilities ProductCompatibility[] @relation("sourceCompatibility")
+  targetCompatibilities ProductCompatibility[] @relation("targetCompatibility")
+  recommendationCandidates RecommendationCandidate[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([tenantId])
   @@index([categoryId])
+}
+
+enum AttributeDataType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  SELECT
+}
+
+model AttributeDefinition {
+  id                    String                @id @default(uuid())
+
+  tenantId              String?
+
+  code                  String
+
+  name                  String
+
+  dataType              AttributeDataType
+
+  unit                  String?
+
+  allowedValues         Json?
+
+  description           String?
+
+  appliesToCategoryId   String?
+
+  active                Boolean               @default(true)
+
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  attributeValues       ProductAttributeValue[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([code])
+}
+
+model ProductAttributeValue {
+  id                          String                @id @default(uuid())
+
+  productId                   String
+  product                     Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  attributeDefinitionId       String
+  attributeDefinition         AttributeDefinition   @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
+
+  valueText                   String?
+
+  valueNumber                 Decimal?
+
+  valueBoolean                Boolean?
+
+  valueJson                   Json?
+
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+
+  @@unique([productId, attributeDefinitionId])
+  @@index([productId])
+  @@index([attributeDefinitionId])
 }
 
 model Customer {
@@ -319,6 +404,7 @@ model Customer {
   quotes          Quote[]
   whatsappConversations WhatsAppConversation[]
   whatsappMessages WhatsAppMessage[]
+  recommendationRuns RecommendationRun[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -394,6 +480,86 @@ enum WhatsAppIntent {
 enum WhatsAppMessageDirection {
   INBOUND
   OUTBOUND
+}
+
+enum CopilotMessageRole {
+  USER
+  ASSISTANT
+}
+
+model CopilotSession {
+  id            String           @id @default(uuid())
+
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [id])
+
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+
+  sessionId     String
+
+  messages      CopilotMessage[]
+  draftConfirmations CopilotDraftConfirmation[]
+  recommendationRuns RecommendationRun[]
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([tenantId, userId, sessionId])
+  @@index([tenantId, userId, updatedAt])
+}
+
+model CopilotDraftConfirmation {
+  id            String           @id @default(uuid())
+
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [id])
+
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+
+  sessionDbId   String
+  session       CopilotSession   @relation(fields: [sessionDbId], references: [id], onDelete: Cascade)
+
+  token         String           @unique
+  draftPayload  Json
+
+  expiresAt     DateTime
+  usedAt        DateTime?
+
+  idempotencyKey String?
+
+  quoteId       String?
+  quote         Quote?           @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([tenantId, userId, expiresAt])
+  @@index([sessionDbId, createdAt])
+  @@unique([tenantId, userId, idempotencyKey])
+}
+
+model CopilotMessage {
+  id            String           @id @default(uuid())
+
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [id])
+
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+
+  sessionDbId   String
+  session       CopilotSession   @relation(fields: [sessionDbId], references: [id], onDelete: Cascade)
+
+  role          CopilotMessageRole
+  text          String
+  metadata      Json?
+
+  createdAt     DateTime         @default(now())
+
+  @@index([tenantId, userId, createdAt])
+  @@index([sessionDbId, createdAt])
 }
 
 model WhatsAppConversation {
@@ -481,6 +647,7 @@ model Quote {
   notes         String?
 
   items         QuoteItem[]
+  copilotDraftConfirmations CopilotDraftConfirmation[]
 
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -567,4 +734,233 @@ model InventoryLedgerEntry {
   @@index([productId])
   @@index([stockId])
   @@index([tenantId, createdAt])
+}
+
+// ===== PHASE 3: COMPATIBILITY & SOLUTIONS =====
+
+enum CompatibilityRelationType {
+  REQUIRED_WITH
+  RECOMMENDED_WITH
+  ALTERNATIVE_TO
+  INCOMPATIBLE_WITH
+}
+
+enum RequirementType {
+  REQUIRED
+  RECOMMENDED
+  OPTIONAL
+}
+
+model ProductCompatibility {
+  id                    String                    @id @default(uuid())
+  tenantId              String?                   // NULL = platform standard
+  sourceProductId       String
+  targetProductId       String
+  relationType          CompatibilityRelationType
+  reason                String?
+  priority              Int                       @default(2) // 1=critical, 2=important, 3=nice-to-have
+  active                Boolean                   @default(true)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  source                Product                   @relation("sourceCompatibility", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  target                Product                   @relation("targetCompatibility", fields: [targetProductId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, sourceProductId, targetProductId, relationType])
+  @@index([sourceProductId])
+  @@index([targetProductId])
+}
+
+model SolutionTemplate {
+  id                    String                    @id @default(uuid())
+  tenantId              String?                   // NULL = platform standard
+  code                  String
+  name                  String
+  categoryId            String?
+  purpose               String?
+  description           String?
+  active                Boolean                   @default(true)
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  items                 SolutionTemplateItem[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model SolutionTemplateItem {
+  id                    String                    @id @default(uuid())
+  solutionTemplateId    String
+  productCategoryId     String?
+  productId             String?
+  requirementType       RequirementType
+  defaultQuantity       Decimal                   @default(1) @db.Decimal(12,2)
+  reason                String?
+  priority              Int                       @default(2)
+  createdAt             DateTime                  @default(now())
+
+  template              SolutionTemplate          @relation(fields: [solutionTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([solutionTemplateId])
+  @@index([productId])
+}
+
+// ===== PHASE 4: DECISION AUDIT TRAIL =====
+
+enum DecisionRuleStatus {
+  DRAFT
+  ACTIVE
+  DEPRECATED
+  ARCHIVED
+}
+
+enum RecommendationRunStatus {
+  PENDING
+  MATCHED
+  NO_MATCH
+  ERROR
+}
+
+enum RecommendationAction {
+  ACCEPTED
+  REJECTED
+  PARTIALLY_ACCEPTED
+  IGNORED
+}
+
+model DecisionRule {
+  id                    String              @id @default(uuid())
+  tenantId              String?             // NULL = platform standard rule, value = shop-specific override
+
+  code                  String              // e.g. "BOREWELL_3HP_SINGLE_PHASE"
+  name                  String
+  description           String?
+
+  status                DecisionRuleStatus  @default(DRAFT)
+  version               Int                 @default(1)
+
+  // Matching conditions (stored as JSON for flexibility)
+  conditions            Json                // e.g. { "depth": { "min": 300, "max": 350 }, "phase": "SINGLE" }
+
+  // What to recommend when matched
+  solutionTemplateId    String?             // Points to a SolutionTemplate to expand
+  overrideProducts      Json?               // Optional product overrides on top of template
+
+  priority              Int                 @default(10) // Lower = higher priority when multiple rules match
+  active                Boolean             @default(true)
+
+  approvedById          String?             // Who approved this rule
+  approvedAt            DateTime?
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  runs                  RecommendationRun[]
+
+  @@unique([tenantId, code, version])
+  @@index([tenantId])
+  @@index([status])
+  @@index([active])
+}
+
+model RecommendationRun {
+  id                    String                    @id @default(uuid())
+  tenantId              String                    // Mandatory: every recommendation belongs to one shop
+  tenant                Tenant                    @relation(fields: [tenantId], references: [id])
+
+  // Who triggered this recommendation
+  userId                String?
+  user                  User?                     @relation(fields: [userId], references: [id])
+
+  customerId            String?
+  customer              Customer?                 @relation(fields: [customerId], references: [id])
+
+  copilotSessionId      String?
+  copilotSession        CopilotSession?           @relation(fields: [copilotSessionId], references: [id])
+
+  // Which rule fired (null if no match)
+  decisionRuleId        String?
+  decisionRule          DecisionRule?             @relation(fields: [decisionRuleId], references: [id])
+
+  status                RecommendationRunStatus   @default(PENDING)
+
+  // The raw query inputs
+  queryInputs           Json                      // e.g. { "depth": 325, "phase": "SINGLE", "budget": 15000 }
+
+  // Summary of result
+  totalCandidates       Int                       @default(0)
+  topScore              Decimal?                  @db.Decimal(5,2)
+
+  // For debugging failed runs
+  errorMessage          String?
+
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  candidates            RecommendationCandidate[]
+  feedback              RecommendationFeedback?
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([userId])
+  @@index([customerId])
+  @@index([copilotSessionId])
+  @@index([decisionRuleId])
+}
+
+model RecommendationCandidate {
+  id                    String              @id @default(uuid())
+
+  runId                 String
+  run                   RecommendationRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  productId             String
+  product               Product             @relation(fields: [productId], references: [id])
+
+  rank                  Int                 // 1 = top recommendation
+
+  totalScore            Decimal             @db.Decimal(5,2)
+
+  // Deterministic score breakdown (stock + price + attributes + preference = total)
+  scoreStock            Decimal             @db.Decimal(5,2)
+  scorePriceMatch       Decimal             @db.Decimal(5,2)
+  scoreAttributeMatch   Decimal             @db.Decimal(5,2)
+  scorePreference       Decimal             @db.Decimal(5,2)
+
+  // Why this product was selected or deselected
+  selectedReason        String?             // For debugging: why this rank was assigned
+
+  createdAt             DateTime            @default(now())
+
+  @@unique([runId, productId])
+  @@index([runId])
+  @@index([productId])
+  @@index([runId, rank])
+}
+
+model RecommendationFeedback {
+  id                    String                  @id @default(uuid())
+
+  runId                 String                  @unique
+  run                   RecommendationRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  action                RecommendationAction
+
+  // Which products were accepted/rejected
+  acceptedProductIds    Json                    @default("[]")
+  rejectedProductIds    Json                    @default("[]")
+
+  // Free-text from shop owner
+  notes                 String?
+
+  // Who gave feedback
+  userId                String?
+  user                  User?                   @relation(fields: [userId], references: [id])
+
+  createdAt             DateTime                @default(now())
+
+  @@index([runId])
+  @@index([userId])
 }

@@ -24,6 +24,18 @@ export class ConfirmDraftQuoteAccessoryDto {
 export class ConfirmDraftQuoteDto {
   @IsString()
   @IsNotEmpty()
+  sessionId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  confirmationToken!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  idempotencyKey!: string;
+
+  @IsString()
+  @IsNotEmpty()
   customerId!: string;
 
   @IsOptional()

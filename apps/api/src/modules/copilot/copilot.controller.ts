@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -18,7 +18,26 @@ export class CopilotController {
 
   @Post('chat')
   chat(@CurrentUser() user: JwtPayload, @Body() dto: CopilotChatDto) {
-    return this.copilotService.chat(user.tenantId, dto.message, dto.previousMessages ?? []);
+    return this.copilotService.chat(
+      user.tenantId,
+      user.sub,
+      dto.message,
+      dto.sessionId,
+      dto.previousMessages ?? [],
+    );
+  }
+
+  @Get('sessions/latest')
+  latestSession(@CurrentUser() user: JwtPayload) {
+    return this.copilotService.getLatestSession(user.tenantId, user.sub);
+  }
+
+  @Get('sessions/:sessionId')
+  getSession(
+    @CurrentUser() user: JwtPayload,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.copilotService.getSessionHistory(user.tenantId, user.sub, sessionId);
   }
 
   @Post('confirm-draft')
@@ -26,6 +45,6 @@ export class CopilotController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: ConfirmDraftQuoteDto,
   ) {
-    return this.copilotService.confirmDraftQuote(user.tenantId, dto);
+    return this.copilotService.confirmDraftQuote(user.tenantId, user.sub, dto);
   }
 }

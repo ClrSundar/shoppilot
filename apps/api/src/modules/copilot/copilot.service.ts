@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { QuotesService } from '../quotes/quotes.service';
@@ -11,9 +12,11 @@ type CopilotToolCall = {
 };
 
 type CopilotChatResponse = {
+  sessionId: string;
   reply: string;
   toolCalls: CopilotToolCall[];
   requiresConfirmation: boolean;
+  confirmationToken?: string;
   draftQuote: DraftQuotePreview | null;
   proposedAction: null | {
     type: string;
@@ -24,6 +27,8 @@ type CopilotChatResponse = {
 type DraftQuotePreview = {
   depth: number;
   recommendedHp: string;
+  suggestedCustomerId?: string;
+  suggestedCustomerName?: string;
   itemCount: number;
   motorSubtotal: number;
   accessorySubtotal: number;
@@ -61,9 +66,17 @@ export class CopilotService {
 
   async chat(
     tenantId: string,
+    userId: string,
     message: string,
+    sessionId: string | undefined,
     previousMessages: PreviousMessageDto[] = [],
   ): Promise<CopilotChatResponse> {
+    const activeSessionId = sessionId?.trim().length
+      ? sessionId.trim()
+      : this.generateSessionId();
+
+    const session = await this.getOrCreateSession(tenantId, userId, activeSessionId);
+
     const lowerMessage = message.toLowerCase();
 
     // --- Context-aware follow-up: affirmative after a borewell/motor response ---
@@ -73,12 +86,31 @@ export class CopilotService {
         .find((m) => m.role === 'assistant')?.text ?? '';
 
       if (this.looksLikeBorewellContext(lastAssistantText)) {
-        return this.buildDraftQuoteProposal(tenantId, lastAssistantText);
+        const response = await this.buildDraftQuoteProposal(
+          tenantId,
+          userId,
+          session.id,
+          lastAssistantText,
+          previousMessages,
+        );
+
+        await this.persistTurn(
+          session.id,
+          tenantId,
+          userId,
+          message,
+          response,
+        );
+
+        return {
+          ...response,
+          sessionId: activeSessionId,
+        };
       }
     }
 
     if (this.looksLikeWriteIntent(lowerMessage)) {
-      return {
+      const response = {
         reply:
           'I can do that, but write actions are currently confirm-only in this phase. Please ask me to prepare a draft and I will return the exact action payload for confirmation.',
         toolCalls: [],
@@ -91,13 +123,98 @@ export class CopilotService {
         },
         draftQuote: null,
       };
+
+      await this.persistTurn(session.id, tenantId, userId, message, response);
+
+      return {
+        ...response,
+        sessionId: activeSessionId,
+      };
     }
 
     if (lowerMessage.includes('borewell') || lowerMessage.includes('motor')) {
-      return this.handleMotorRecommendation(tenantId, message);
+      const response = await this.handleMotorRecommendation(
+        tenantId,
+        userId,
+        session.id,
+        message,
+      );
+
+      await this.persistTurn(session.id, tenantId, userId, message, response);
+
+      return {
+        ...response,
+        sessionId: activeSessionId,
+      };
     }
 
-    return this.handleBusinessInsight(tenantId, lowerMessage);
+    const response = await this.handleBusinessInsight(tenantId, lowerMessage);
+
+    await this.persistTurn(session.id, tenantId, userId, message, response);
+
+    return {
+      ...response,
+      sessionId: activeSessionId,
+    };
+  }
+
+  async getLatestSession(tenantId: string, userId: string) {
+    const session = await this.prisma.copilotSession.findFirst({
+      where: {
+        tenantId,
+        userId,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      select: {
+        sessionId: true,
+      },
+    });
+
+    if (!session) {
+      return {
+        sessionId: null,
+        messages: [],
+      };
+    }
+
+    return this.getSessionHistory(tenantId, userId, session.sessionId);
+  }
+
+  async getSessionHistory(tenantId: string, userId: string, sessionId: string) {
+    const session = await this.prisma.copilotSession.findFirst({
+      where: {
+        tenantId,
+        userId,
+        sessionId,
+      },
+      include: {
+        messages: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      return {
+        sessionId,
+        messages: [],
+      };
+    }
+
+    return {
+      sessionId,
+      messages: session.messages.map((message) => ({
+        id: message.id,
+        role: message.role === 'USER' ? 'user' : 'assistant',
+        text: message.text,
+        metadata: message.metadata,
+        createdAt: message.createdAt,
+      })),
+    };
   }
 
   private isAffirmative(lowerMessage: string): boolean {
@@ -119,7 +236,10 @@ export class CopilotService {
 
   private async buildDraftQuoteProposal(
     tenantId: string,
+    userId: string,
+    sessionDbId: string,
     lastAssistantText: string,
+    previousMessages: PreviousMessageDto[] = [],
   ): Promise<CopilotChatResponse> {
     // Pull depth from last assistant text if available
     const depthMatch = lastAssistantText.match(/(\d+(?:\.\d+)?)\s*ft\b/i);
@@ -134,6 +254,10 @@ export class CopilotService {
     const hp = this.recommendedHp(depth);
     const motors = this.selectMotors(allProducts, hp);
     const accessories = this.selectAccessories(allProducts, depth);
+    const suggestedCustomer = await this.resolveSuggestedCustomer(
+      tenantId,
+      previousMessages,
+    );
 
     const motorItem = motors[0] ?? null;
     const accessorySubtotal = accessories.reduce((s, i) => s + i.total, 0);
@@ -190,13 +314,33 @@ export class CopilotService {
     lines.push('');
     lines.push('To create this as a quote, reply: create quote customer=<Name>');
 
+    const confirmationToken = await this.createDraftConfirmationToken(
+      tenantId,
+      userId,
+      sessionDbId,
+      {
+        depth,
+        recommendedHp: hp,
+        suggestedCustomerId: suggestedCustomer?.id ?? null,
+        motorProductId: motorItem?.id ?? null,
+        accessories: accessories.map((a) => ({
+          productId: a.id,
+          quantity: a.quantity,
+        })),
+      },
+    );
+
     return {
+      sessionId: '',
       reply: lines.join('\n'),
       toolCalls: [],
       requiresConfirmation: true,
+      confirmationToken,
       draftQuote: {
         depth,
         recommendedHp: hp,
+        suggestedCustomerId: suggestedCustomer?.id,
+        suggestedCustomerName: suggestedCustomer?.name,
         itemCount: draftItems.length,
         motorSubtotal,
         accessorySubtotal,
@@ -207,18 +351,115 @@ export class CopilotService {
         type: 'DRAFT_QUOTE',
         payload: {
           depth,
+          recommendedHp: hp,
+          suggestedCustomerId: suggestedCustomer?.id ?? null,
           motorProductId: motorItem?.id ?? null,
           accessories: accessories.map((a) => ({
             productId: a.id,
             quantity: a.quantity,
           })),
           estimatedTotal: grandTotal,
+          confirmationToken,
         },
       },
     };
   }
 
-  async confirmDraftQuote(tenantId: string, dto: ConfirmDraftQuoteDto) {
+  async confirmDraftQuote(tenantId: string, userId: string, dto: ConfirmDraftQuoteDto) {
+    const session = await this.prisma.copilotSession.findFirst({
+      where: {
+        tenantId,
+        userId,
+        sessionId: dto.sessionId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!session) {
+      throw new BadRequestException('Invalid or expired session for draft confirmation');
+    }
+
+    const existingByIdempotency = await this.prisma.copilotDraftConfirmation.findUnique({
+      where: {
+        tenantId_userId_idempotencyKey: {
+          tenantId,
+          userId,
+          idempotencyKey: dto.idempotencyKey,
+        },
+      },
+      select: {
+        quoteId: true,
+      },
+    });
+
+    if (existingByIdempotency?.quoteId) {
+      const quote = await this.prisma.quote.findFirst({
+        where: {
+          id: existingByIdempotency.quoteId,
+          tenantId,
+        },
+        include: {
+          customer: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (quote) {
+        return {
+          success: true,
+          quoteId: quote.id,
+          quoteNumber: quote.quoteNumber,
+          status: quote.status,
+          totalAmount: Number(quote.totalAmount),
+          customer: {
+            id: quote.customer.id,
+            name: quote.customer.name,
+          },
+          idempotentReplay: true,
+        };
+      }
+    }
+
+    const confirmation = await this.prisma.copilotDraftConfirmation.findUnique({
+      where: {
+        token: dto.confirmationToken,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        userId: true,
+        sessionDbId: true,
+        usedAt: true,
+        expiresAt: true,
+      },
+    });
+
+    if (!confirmation) {
+      throw new BadRequestException('Invalid confirmation token');
+    }
+
+    if (
+      confirmation.tenantId !== tenantId ||
+      confirmation.userId !== userId ||
+      confirmation.sessionDbId !== session.id
+    ) {
+      throw new BadRequestException('Confirmation token does not belong to this session');
+    }
+
+    if (confirmation.usedAt) {
+      throw new BadRequestException('This draft has already been confirmed');
+    }
+
+    if (confirmation.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Confirmation token expired. Please regenerate draft');
+    }
+
     const accessories = dto.accessories ?? [];
 
     const items = [
@@ -256,6 +497,17 @@ export class CopilotService {
       notes,
     });
 
+    await this.prisma.copilotDraftConfirmation.update({
+      where: {
+        id: confirmation.id,
+      },
+      data: {
+        usedAt: new Date(),
+        idempotencyKey: dto.idempotencyKey,
+        quoteId: quote.id,
+      },
+    });
+
     return {
       success: true,
       quoteId: quote.id,
@@ -266,6 +518,7 @@ export class CopilotService {
         id: quote.customer.id,
         name: quote.customer.name,
       },
+      idempotentReplay: false,
     };
   }
 
@@ -325,6 +578,7 @@ export class CopilotService {
 
     if (lowerMessage.includes('pending')) {
       return {
+        sessionId: '',
         reply: `You currently have ${pendingQuotes} quotes pending action (DRAFT or SENT).`,
         toolCalls,
         requiresConfirmation: false,
@@ -335,6 +589,7 @@ export class CopilotService {
 
     if (lowerMessage.includes('worker') || lowerMessage.includes('team')) {
       return {
+        sessionId: '',
         reply: `You currently have ${workers} active team members.`,
         toolCalls,
         requiresConfirmation: false,
@@ -344,6 +599,7 @@ export class CopilotService {
     }
 
     return {
+      sessionId: '',
       reply: [
         'Here is your live tenant snapshot:',
         `- Categories: ${categories}`,
@@ -362,12 +618,15 @@ export class CopilotService {
 
   private async handleMotorRecommendation(
     tenantId: string,
+    userId: string,
+    sessionDbId: string,
     message: string,
   ): Promise<CopilotChatResponse> {
     const depth = this.extractDepthInFeet(message);
 
     if (!depth) {
       return {
+        sessionId: '',
         reply:
           'Please share the borewell depth in feet (for example: 320ft) so I can recommend the right motor and accessories.',
         toolCalls: [],
@@ -396,8 +655,51 @@ export class CopilotService {
 
     const motors = this.selectMotors(allProducts, hp);
     const accessories = this.selectAccessories(allProducts, depth);
+    const suggestedCustomer = await this.resolveSuggestedCustomer(tenantId, []);
+
+    const motorItem = motors[0] ?? null;
+    const draftItems: DraftQuotePreview['items'] = [
+      ...(motorItem
+        ? [
+            {
+              productId: motorItem.id,
+              name: motorItem.name,
+              quantity: 1,
+              unitPrice: motorItem.price,
+              lineTotal: motorItem.price,
+              kind: 'MOTOR' as const,
+            },
+          ]
+        : []),
+      ...accessories.map((item) => ({
+        productId: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        lineTotal: item.total,
+        kind: 'ACCESSORY' as const,
+      })),
+    ];
 
     const accessorySubtotal = accessories.reduce((sum, item) => sum + item.total, 0);
+    const motorSubtotal = motorItem?.price ?? 0;
+    const estimatedTotal = Number((motorSubtotal + accessorySubtotal).toFixed(2));
+
+    const confirmationToken = await this.createDraftConfirmationToken(
+      tenantId,
+      userId,
+      sessionDbId,
+      {
+        depth,
+        recommendedHp: hp,
+        suggestedCustomerId: suggestedCustomer?.id ?? null,
+        motorProductId: motorItem?.id ?? null,
+        accessories: accessories.map((a) => ({
+          productId: a.id,
+          quantity: a.quantity,
+        })),
+      },
+    );
 
     const toolCalls: CopilotToolCall[] = [
       {
@@ -434,6 +736,7 @@ export class CopilotService {
           ].join('\n');
 
     return {
+      sessionId: '',
       reply: [
         `For a ${depth} ft borewell, recommended motor capacity is around ${hp}.`,
         motorSection,
@@ -441,10 +744,128 @@ export class CopilotService {
         'If you want, I can prepare a draft quote payload next for confirmation.',
       ].join('\n\n'),
       toolCalls,
-      requiresConfirmation: false,
-      draftQuote: null,
-      proposedAction: null,
+      requiresConfirmation: true,
+      confirmationToken,
+      draftQuote: {
+        depth,
+        recommendedHp: hp,
+        suggestedCustomerId: suggestedCustomer?.id,
+        suggestedCustomerName: suggestedCustomer?.name,
+        itemCount: draftItems.length,
+        motorSubtotal,
+        accessorySubtotal,
+        estimatedTotal,
+        items: draftItems,
+      },
+      proposedAction: {
+        type: 'DRAFT_QUOTE',
+        payload: {
+          depth,
+          recommendedHp: hp,
+          suggestedCustomerId: suggestedCustomer?.id ?? null,
+          motorProductId: motorItem?.id ?? null,
+          accessories: accessories.map((a) => ({
+            productId: a.id,
+            quantity: a.quantity,
+          })),
+          estimatedTotal,
+          confirmationToken,
+        },
+      },
     };
+  }
+
+  private async getOrCreateSession(
+    tenantId: string,
+    userId: string,
+    sessionId: string,
+  ) {
+    return this.prisma.copilotSession.upsert({
+      where: {
+        tenantId_userId_sessionId: {
+          tenantId,
+          userId,
+          sessionId,
+        },
+      },
+      create: {
+        tenantId,
+        userId,
+        sessionId,
+      },
+      update: {},
+    });
+  }
+
+  private async persistTurn(
+    sessionDbId: string,
+    tenantId: string,
+    userId: string,
+    userMessage: string,
+    response: Omit<CopilotChatResponse, 'sessionId'>,
+  ) {
+    const metadata = {
+      requiresConfirmation: response.requiresConfirmation,
+      confirmationToken: response.confirmationToken,
+      draftQuote: response.draftQuote,
+      proposedAction: response.proposedAction,
+    } as Prisma.InputJsonValue;
+
+    await this.prisma.$transaction([
+      this.prisma.copilotMessage.create({
+        data: {
+          tenantId,
+          userId,
+          sessionDbId,
+          role: 'USER',
+          text: userMessage,
+        },
+      }),
+      this.prisma.copilotMessage.create({
+        data: {
+          tenantId,
+          userId,
+          sessionDbId,
+          role: 'ASSISTANT',
+          text: response.reply,
+          metadata,
+        },
+      }),
+      this.prisma.copilotSession.update({
+        where: {
+          id: sessionDbId,
+        },
+        data: {
+          updatedAt: new Date(),
+        },
+      }),
+    ]);
+  }
+
+  private generateSessionId() {
+    return `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private async createDraftConfirmationToken(
+    tenantId: string,
+    userId: string,
+    sessionDbId: string,
+    draftPayload: Prisma.InputJsonValue,
+  ): Promise<string> {
+    const token = `cpt_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+
+    await this.prisma.copilotDraftConfirmation.create({
+      data: {
+        tenantId,
+        userId,
+        sessionDbId,
+        token,
+        draftPayload,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    return token;
   }
 
   private extractDepthInFeet(text: string): number | null {
@@ -469,6 +890,101 @@ export class CopilotService {
     }
 
     return value;
+  }
+
+  private async resolveSuggestedCustomer(
+    tenantId: string,
+    previousMessages: PreviousMessageDto[],
+  ) {
+    const context = previousMessages
+      .filter((message) => message.role === 'user')
+      .map((message) => message.text)
+      .join(' ');
+
+    // 1) Try phone-based resolution first.
+    const phoneMatch = context.match(/\b(?:\+?91[-\s]?)?(\d{10})\b/);
+
+    if (phoneMatch) {
+      const normalizedPhone = phoneMatch[1].replace(/[^0-9]/g, '');
+
+      const customerByPhone = await this.prisma.customer.findFirst({
+        where: {
+          tenantId,
+          active: true,
+          OR: [
+            {
+              phone: {
+                equals: normalizedPhone,
+              },
+            },
+            {
+              whatsappNumber: {
+                equals: normalizedPhone,
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      if (customerByPhone) {
+        return customerByPhone;
+      }
+    }
+
+    // 2) Try explicit customer=Name patterns.
+    const customerPattern =
+      context.match(/customer\s*=\s*([a-z0-9 .'-]{2,80})/i) ??
+      context.match(/for\s+customer\s+([a-z0-9 .'-]{2,80})/i) ??
+      context.match(/for\s+([a-z][a-z .'-]{1,80})/i);
+
+    const customerQuery = customerPattern?.[1]?.trim();
+
+    if (customerQuery) {
+      const customerByName = await this.prisma.customer.findFirst({
+        where: {
+          tenantId,
+          active: true,
+          name: {
+            contains: customerQuery,
+            mode: 'insensitive',
+          },
+        },
+        orderBy: {
+          updatedAt: 'desc',
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      if (customerByName) {
+        return customerByName;
+      }
+    }
+
+    // 3) Safe fallback: if exactly one active customer exists, use it.
+    const activeCustomers = await this.prisma.customer.findMany({
+      where: {
+        tenantId,
+        active: true,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+      take: 2,
+    });
+
+    if (activeCustomers.length === 1) {
+      return activeCustomers[0];
+    }
+
+    return null;
   }
 
   private recommendedHp(depth: number): string {
