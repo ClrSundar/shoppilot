@@ -19,6 +19,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { UnifiedBulkUploadModule } from './modules/unified-bulk-upload/unified-bulk-upload.module';
 import { AgentsModule } from './modules/agents/agents.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
+import { DecisionModule } from './modules/decisions/decisions.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { CopilotModule } from './modules/copilot/copilot.module';
     UnifiedBulkUploadModule,
     AgentsModule,
     CopilotModule,
+    DecisionModule,
   ],
   providers: [
     {
