@@ -5,6 +5,58 @@ export type CopilotToolCall = {
   resultSummary: string;
 };
 
+export type RecommendationScoreBreakdown = {
+  attributeMatch: number;
+  stock: number;
+  price: number;
+  compatibility: number;
+  total: number;
+};
+
+export type RecommendationCandidate = {
+  rank: number;
+  productId: string;
+  productName: string;
+  sku: string;
+  sellingPrice: number;
+  stockQty: number;
+  scoreBreakdown: RecommendationScoreBreakdown;
+  selectedReason: string;
+};
+
+export type CopilotRecommendation = {
+  recommendationRunId: string;
+  status: 'MATCHED' | 'NO_MATCH' | 'ERROR';
+  appliedRule: {
+    id: string;
+    code: string;
+    name: string;
+    version: number;
+    scope: 'tenant' | 'platform';
+  } | null;
+  explanation: string;
+  primaryRecommendation: {
+    productId: string;
+    productName: string;
+    sku: string;
+    score: number;
+    scoreBreakdown: RecommendationScoreBreakdown;
+    selectedReason: string;
+  } | null;
+  alternatives: string[];
+  solutionItems: {
+    required: string[];
+    recommended: string[];
+    optional: string[];
+  };
+  candidates: RecommendationCandidate[];
+  missingFields?: string[];
+  reasonCode?: 'MISSING_REQUIRED_FIELDS' | 'NO_RULE_FOR_INPUT';
+  suggestedAction?: string;
+  warnings?: string[];
+  errorMessage?: string;
+};
+
 export type CopilotChatResponse = {
   sessionId: string;
   reply: string;
@@ -12,6 +64,7 @@ export type CopilotChatResponse = {
   requiresConfirmation: boolean;
   confirmationToken?: string;
   draftQuote: DraftQuotePreview | null;
+  recommendation: CopilotRecommendation | null;
   proposedAction: null | {
     type: string;
     payload: Record<string, unknown>;
@@ -50,6 +103,7 @@ export type CopilotSessionHistory = {
     text: string;
     metadata?: {
       draftQuote?: DraftQuotePreview | null;
+      recommendation?: CopilotRecommendation | null;
       proposedAction?: null | {
         type: string;
         payload: Record<string, unknown>;

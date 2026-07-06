@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { QuotesService } from '../quotes/quotes.service';
 import { DecisionService } from '../decisions/decisions.service';
+import type { RecommendSolutionResponse } from '../decisions/dto/recommend-solution-response.type';
 import { ConfirmDraftQuoteDto } from './dto/confirm-draft-quote.dto';
 import { PreviousMessageDto } from './dto/copilot-chat.dto';
 
@@ -19,6 +20,7 @@ type CopilotChatResponse = {
   requiresConfirmation: boolean;
   confirmationToken?: string;
   draftQuote: DraftQuotePreview | null;
+  recommendation: RecommendSolutionResponse | null;
   proposedAction: null | {
     type: string;
     payload: Record<string, unknown>;
@@ -94,6 +96,7 @@ export class CopilotService {
           toolCalls: [],
           requiresConfirmation: false,
           draftQuote: null,
+          recommendation: null,
           proposedAction: null,
         };
 
@@ -119,6 +122,7 @@ export class CopilotService {
           },
         },
         draftQuote: null,
+        recommendation: null,
       };
 
       await this.persistTurn(session.id, tenantId, userId, message, response);
@@ -344,6 +348,7 @@ export class CopilotService {
         estimatedTotal: grandTotal,
         items: draftItems,
       },
+      recommendation: null,
       proposedAction: {
         type: 'DRAFT_QUOTE',
         payload: {
@@ -580,6 +585,7 @@ export class CopilotService {
         toolCalls,
         requiresConfirmation: false,
         draftQuote: null,
+        recommendation: null,
         proposedAction: null,
       };
     }
@@ -591,6 +597,7 @@ export class CopilotService {
         toolCalls,
         requiresConfirmation: false,
         draftQuote: null,
+        recommendation: null,
         proposedAction: null,
       };
     }
@@ -609,6 +616,7 @@ export class CopilotService {
       toolCalls,
       requiresConfirmation: false,
       draftQuote: null,
+      recommendation: null,
       proposedAction: null,
     };
   }
@@ -634,6 +642,7 @@ export class CopilotService {
         toolCalls: [],
         requiresConfirmation: false,
         draftQuote: null,
+        recommendation: null,
         proposedAction: null,
       };
     }
@@ -673,6 +682,7 @@ export class CopilotService {
         toolCalls,
         requiresConfirmation: false,
         draftQuote: null,
+        recommendation: decision,
         proposedAction: null,
       };
     }
@@ -816,6 +826,7 @@ export class CopilotService {
         estimatedTotal,
         items: draftItems,
       },
+      recommendation: decision,
       proposedAction: {
         type: 'DRAFT_QUOTE',
         payload: {
@@ -868,6 +879,7 @@ export class CopilotService {
       requiresConfirmation: response.requiresConfirmation,
       confirmationToken: response.confirmationToken,
       draftQuote: response.draftQuote,
+      recommendation: response.recommendation,
       proposedAction: response.proposedAction,
     } as Prisma.InputJsonValue;
 

@@ -23,6 +23,7 @@ import { useAppToast } from '@/hooks/use-app-toast';
 import { customersService } from '@/services/customers.service';
 import { productsService } from '@/services/products.service';
 import {
+  CopilotRecommendation,
   DraftQuotePreview,
   PreviousMessage,
   copilotService,
@@ -33,6 +34,7 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   text: string;
   draftQuote?: DraftQuotePreview | null;
+  recommendation?: CopilotRecommendation | null;
   proposedAction?: null | {
     type: string;
     payload: Record<string, unknown>;
@@ -47,6 +49,14 @@ const starterPrompts = [
   'How many workers are active?',
   'I have a borewell of depth 320ft what motor should i use and accessories needed',
 ];
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 function normalizeDraftQuote(draft: DraftQuotePreview): DraftQuotePreview {
   const items = draft.items.map((item) => {
@@ -97,6 +107,7 @@ export default function CopilotPage() {
   const [draftAdditions, setDraftAdditions] = useState<
     Record<string, { productId: string; quantity: string }>
   >({});
+  const [showDraftByMessage, setShowDraftByMessage] = useState<Record<string, boolean>>({});
 
   const { data: customers = [] } = useQuery({
     queryKey: ['customers'],
@@ -129,6 +140,7 @@ export default function CopilotPage() {
             role: message.role,
             text: message.text,
             draftQuote: message.metadata?.draftQuote,
+            recommendation: message.metadata?.recommendation,
             proposedAction: message.metadata?.proposedAction,
             confirmationToken: message.metadata?.confirmationToken,
             requiresConfirmation: message.metadata?.requiresConfirmation,
@@ -202,6 +214,7 @@ export default function CopilotPage() {
           role: 'assistant',
           text: data.reply,
           draftQuote: data.draftQuote,
+          recommendation: data.recommendation,
           proposedAction: data.proposedAction,
           confirmationToken: data.confirmationToken,
           requiresConfirmation: data.requiresConfirmation,
@@ -222,6 +235,11 @@ export default function CopilotPage() {
             productId: '',
             quantity: '1',
           },
+        }));
+
+        setShowDraftByMessage((prev) => ({
+          ...prev,
+          [assistantId]: false,
         }));
 
         setSelectedCustomerByMessage((prev) => ({
@@ -515,6 +533,13 @@ export default function CopilotPage() {
     }));
   };
 
+  const openDraftEditor = (messageId: string) => {
+    setShowDraftByMessage((prev) => ({
+      ...prev,
+      [messageId]: true,
+    }));
+  };
+
   return (
     <Box>
       <Card
@@ -595,7 +620,150 @@ export default function CopilotPage() {
                     </Typography>
                     <Typography variant="body2">{message.text}</Typography>
 
-                    {message.draftQuote ? (
+                    {message.recommendation ? (
+                      <Card
+                        variant="outlined"
+                        sx={{
+                          mt: 1.25,
+                          borderRadius: 2,
+                          bgcolor: 'background.paper',
+                          color: 'text.primary',
+                          borderColor: 'divider',
+                        }}
+                      >
+                        <CardContent sx={{ p: 1.5 }}>
+                          <Stack spacing={1.25}>
+                            <Stack
+                              direction={{ xs: 'column', md: 'row' }}
+                              spacing={1}
+                              sx={{
+                                justifyContent: 'space-between',
+                                alignItems: { xs: 'flex-start', md: 'center' },
+                              }}
+                            >
+                              <Box>
+                                <Typography variant="overline" sx={{ color: 'text.secondary' }}>
+                                  Recommendation
+                                </Typography>
+                                <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                                  {message.recommendation.primaryRecommendation?.productName ?? 'No match'}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                  {message.recommendation.appliedRule
+                                    ? `Rule: ${message.recommendation.appliedRule.code}`
+                                    : 'No rule applied'}
+                                </Typography>
+                              </Box>
+                                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                                <Chip
+                                  size="small"
+                                  color={
+                                    message.recommendation.status === 'MATCHED'
+                                      ? 'success'
+                                      : message.recommendation.status === 'NO_MATCH'
+                                        ? 'warning'
+                                        : 'error'
+                                  }
+                                  label={message.recommendation.status}
+                                />
+                                {message.recommendation.primaryRecommendation ? (
+                                  <Chip
+                                    size="small"
+                                    label={`Score ${message.recommendation.primaryRecommendation.score}`}
+                                  />
+                                ) : null}
+                              </Stack>
+                            </Stack>
+
+                            {message.recommendation.warnings?.length ? (
+                              <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                                {message.recommendation.warnings.join(' ')}
+                              </Alert>
+                            ) : null}
+
+                            <Box
+                              sx={{
+                                p: 1.25,
+                                borderRadius: 2,
+                                bgcolor: 'grey.50',
+                                border: '1px solid',
+                                borderColor: 'divider',
+                              }}
+                            >
+                              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }}>
+                                Why this?
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                {message.recommendation.primaryRecommendation?.selectedReason ?? message.recommendation.explanation}
+                              </Typography>
+                              {message.recommendation.primaryRecommendation ? (
+                                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                                  <Chip size="small" label={`Attribute ${message.recommendation.primaryRecommendation.scoreBreakdown.attributeMatch}`} />
+                                  <Chip size="small" label={`Stock ${message.recommendation.primaryRecommendation.scoreBreakdown.stock}`} />
+                                  <Chip size="small" label={`Price ${message.recommendation.primaryRecommendation.scoreBreakdown.price}`} />
+                                  <Chip size="small" label={`Compatibility ${message.recommendation.primaryRecommendation.scoreBreakdown.compatibility}`} />
+                                </Stack>
+                              ) : null}
+                            </Box>
+
+                            {message.recommendation.alternatives.length > 0 ? (
+                              <Box>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.75 }}>
+                                  Alternatives
+                                </Typography>
+                                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                                  {message.recommendation.alternatives.map((alternative) => (
+                                    <Chip key={alternative} size="small" variant="outlined" label={alternative} />
+                                  ))}
+                                </Stack>
+                              </Box>
+                            ) : null}
+
+                            <Stack spacing={1}>
+                              {[
+                                { label: 'Required', items: message.recommendation.solutionItems.required, color: 'error' as const },
+                                { label: 'Recommended', items: message.recommendation.solutionItems.recommended, color: 'success' as const },
+                                { label: 'Optional', items: message.recommendation.solutionItems.optional, color: 'default' as const },
+                              ].map((section) =>
+                                section.items.length > 0 ? (
+                                  <Box key={section.label}>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.75 }}>
+                                      {section.label}
+                                    </Typography>
+                                    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                                      {section.items.map((item) => (
+                                        <Chip key={`${section.label}-${item}`} size="small" color={section.color} variant={section.color === 'default' ? 'outlined' : 'filled'} label={item} />
+                                      ))}
+                                    </Stack>
+                                  </Box>
+                                ) : null,
+                              )}
+                            </Stack>
+
+                            {message.draftQuote ? (
+                              <Stack
+                                direction={{ xs: 'column', md: 'row' }}
+                                spacing={1}
+                                sx={{ alignItems: { xs: 'stretch', md: 'center' } }}
+                              >
+                                <Button
+                                  variant="contained"
+                                  onClick={() => openDraftEditor(message.id)}
+                                  disabled={showDraftByMessage[message.id] === true}
+                                >
+                                  {showDraftByMessage[message.id] ? 'Quote Draft Open' : 'Create Quote Draft'}
+                                </Button>
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                  Estimated draft total: {formatCurrency((getEffectiveDraft(message)?.estimatedTotal ?? 0))}
+                                </Typography>
+                              </Stack>
+                            ) : null}
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+
+                    {message.draftQuote && (!message.recommendation || showDraftByMessage[message.id]) ? (
                       <Box
                         sx={{
                           mt: 1.2,
