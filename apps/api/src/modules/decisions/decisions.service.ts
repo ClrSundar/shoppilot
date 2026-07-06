@@ -125,6 +125,12 @@ export class DecisionService {
         solutionItems: { required: [], recommended: [], optional: [] },
         candidates: [],
         missingFields,
+        reasonCode:
+          missingFields.length > 0 ? 'MISSING_REQUIRED_FIELDS' : 'NO_RULE_FOR_INPUT',
+        suggestedAction:
+          missingFields.length > 0
+            ? `Please provide required fields: ${missingFields.join(', ')}.`
+            : this.buildNoRuleSuggestedAction(dto.queryInputs),
       };
     }
 
@@ -151,6 +157,9 @@ export class DecisionService {
         solutionItems: { required: [], recommended: [], optional: [] },
         candidates: [],
         missingFields: [],
+        reasonCode: 'NO_RULE_FOR_INPUT',
+        suggestedAction:
+          'Fix template setup: ensure REQUIRED item has a valid primary product category.',
       };
     }
 
@@ -180,6 +189,9 @@ export class DecisionService {
         solutionItems: { required: [], recommended: [], optional: [] },
         candidates: [],
         missingFields: [],
+        reasonCode: 'NO_RULE_FOR_INPUT',
+        suggestedAction:
+          'Add active products in the primary category that match the rule profile (HP/phase).',
       };
     }
 
@@ -201,18 +213,23 @@ export class DecisionService {
       primaryCategoryId,
     );
 
-    const primaryRecommendation = ranked[0]
+    const selectablePrimary = ranked.find((candidate) => candidate.stockQty > 0) ?? null;
+
+    const primaryRecommendation = selectablePrimary
       ? {
-          productId: ranked[0].productId,
-          productName: ranked[0].productName,
-          sku: ranked[0].sku,
-          score: ranked[0].scoreBreakdown.total,
-          scoreBreakdown: ranked[0].scoreBreakdown,
-          selectedReason: ranked[0].selectedReason,
+          productId: selectablePrimary.productId,
+          productName: selectablePrimary.productName,
+          sku: selectablePrimary.sku,
+          score: selectablePrimary.scoreBreakdown.total,
+          scoreBreakdown: selectablePrimary.scoreBreakdown,
+          selectedReason: selectablePrimary.selectedReason,
         }
       : null;
 
-    const alternatives = ranked.slice(1).map((c) => c.productName);
+    const alternatives = ranked
+      .filter((c) => c.productId !== primaryRecommendation?.productId)
+      .map((c) => c.productName);
+    const warnings = this.buildWarnings(dto.queryInputs, ranked);
 
     return {
       recommendationRunId: runId,
@@ -223,6 +240,7 @@ export class DecisionService {
       alternatives,
       solutionItems,
       candidates: ranked,
+      warnings,
     };
   }
 
@@ -319,6 +337,45 @@ export class DecisionService {
     // Common expected fields for motor/borewell decision engine
     const commonFields = ['boreDepthFt', 'phase'];
     return commonFields.filter((f) => queryInputs[f] === undefined);
+  }
+
+  private buildNoRuleSuggestedAction(
+    queryInputs: Record<string, string | number | boolean>,
+  ): string {
+    const depth = queryInputs.boreDepthFt ?? queryInputs.depth;
+    const phase = queryInputs.phase;
+
+    if (depth !== undefined && phase !== undefined) {
+      return `Create a rule for ${String(phase).toUpperCase()} phase borewell around ${depth} ft.`;
+    }
+
+    return 'Create an ACTIVE decision rule that covers this input profile.';
+  }
+
+  private buildWarnings(
+    queryInputs: Record<string, string | number | boolean>,
+    candidates: CandidateResult[],
+  ): string[] | undefined {
+    const budgetRaw = queryInputs.budget;
+    if (budgetRaw === undefined || budgetRaw === null) return undefined;
+
+    const budget = Number(budgetRaw);
+    if (!Number.isFinite(budget) || budget <= 0) return undefined;
+
+    const top = candidates[0];
+    if (!top) return undefined;
+
+    const warnings: string[] = [
+      'Budget check currently covers the primary product only. Accessories are not included in this budget check.',
+    ];
+
+    if (top.sellingPrice > budget) {
+      warnings.unshift(
+        `Recommended products exceed the provided budget of Rs ${budget.toLocaleString('en-IN')}.`,
+      );
+    }
+
+    return warnings;
   }
 
   // =========================================================================
@@ -585,6 +642,11 @@ export class DecisionService {
 
     // Sort: higher total score first; break ties by product name (alphabetical = deterministic)
     scored.sort((a, b) => {
+      const aInStock = a.stockQty > 0 ? 1 : 0;
+      const bInStock = b.stockQty > 0 ? 1 : 0;
+      if (bInStock !== aInStock) {
+        return bInStock - aInStock;
+      }
       if (b.scoreBreakdown.total !== a.scoreBreakdown.total) {
         return b.scoreBreakdown.total - a.scoreBreakdown.total;
       }

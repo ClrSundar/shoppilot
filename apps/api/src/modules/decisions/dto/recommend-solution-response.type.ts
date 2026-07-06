@@ -55,6 +55,12 @@ export interface RecommendSolutionResponse {
 
   // Present when status = NO_MATCH
   missingFields?: string[];
+  reasonCode?: 'MISSING_REQUIRED_FIELDS' | 'NO_RULE_FOR_INPUT';
+  suggestedAction?: string;
+
+  // Present when recommendation is valid but has constraints.
+  warnings?: string[];
+
   // Present when status = ERROR
   errorMessage?: string;
 }

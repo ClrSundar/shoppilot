@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { QuotesService } from '../quotes/quotes.service';
+import { DecisionService } from '../decisions/decisions.service';
 import { ConfirmDraftQuoteDto } from './dto/confirm-draft-quote.dto';
 import { PreviousMessageDto } from './dto/copilot-chat.dto';
 
@@ -62,6 +63,7 @@ export class CopilotService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly quotesService: QuotesService,
+    private readonly decisionService: DecisionService,
   ) {}
 
   async chat(
@@ -86,21 +88,16 @@ export class CopilotService {
         .find((m) => m.role === 'assistant')?.text ?? '';
 
       if (this.looksLikeBorewellContext(lastAssistantText)) {
-        const response = await this.buildDraftQuoteProposal(
-          tenantId,
-          userId,
-          session.id,
-          lastAssistantText,
-          previousMessages,
-        );
+        const response = {
+          reply:
+            'I can prepare a quote draft from the latest recommendation. Please share the customer name (or customer ID) and confirm with "create quote".',
+          toolCalls: [],
+          requiresConfirmation: false,
+          draftQuote: null,
+          proposedAction: null,
+        };
 
-        await this.persistTurn(
-          session.id,
-          tenantId,
-          userId,
-          message,
-          response,
-        );
+        await this.persistTurn(session.id, tenantId, userId, message, response);
 
         return {
           ...response,
@@ -623,12 +620,17 @@ export class CopilotService {
     message: string,
   ): Promise<CopilotChatResponse> {
     const depth = this.extractDepthInFeet(message);
+    const phase = this.extractPhase(message);
+    const budget = this.extractBudget(message);
 
-    if (!depth) {
+    const missing: string[] = [];
+    if (depth === null) missing.push('boreDepthFt');
+    if (phase === null) missing.push('phase');
+
+    if (missing.length > 0) {
       return {
         sessionId: '',
-        reply:
-          'Please share the borewell depth in feet (for example: 320ft) so I can recommend the right motor and accessories.',
+        reply: `Please share required inputs: ${missing.join(', ')}. Example: "330 ft SINGLE phase budget 50000".`,
         toolCalls: [],
         requiresConfirmation: false,
         draftQuote: null,
@@ -636,53 +638,150 @@ export class CopilotService {
       };
     }
 
-    const hp = this.recommendedHp(depth);
+    const depthFt = depth as number;
+    const phaseType = phase as 'SINGLE' | 'THREE';
 
-    const allProducts = await this.prisma.product.findMany({
-      where: {
-        tenantId,
-        active: true,
+    const decision = await this.decisionService.recommendSolution(tenantId, userId, {
+      queryInputs: {
+        boreDepthFt: depthFt,
+        phase: phaseType,
+        ...(budget !== null ? { budget } : {}),
       },
-      include: {
-        category: {
-          select: {
-            name: true,
-          },
-        },
-      },
-      take: 500,
+      copilotSessionId: sessionDbId,
     });
 
-    const motors = this.selectMotors(allProducts, hp);
-    const accessories = this.selectAccessories(allProducts, depth);
-    const suggestedCustomer = await this.resolveSuggestedCustomer(tenantId, []);
+    const toolCalls: CopilotToolCall[] = [
+      {
+        tool: 'decision_engine.recommend_solution',
+        resultSummary: `status=${decision.status}, runId=${decision.recommendationRunId}, rule=${decision.appliedRule?.code ?? 'NONE'}`,
+      },
+    ];
 
-    const motorItem = motors[0] ?? null;
+    if (decision.status !== 'MATCHED' || !decision.primaryRecommendation) {
+      const lines = [
+        decision.explanation,
+        decision.reasonCode ? `Reason: ${decision.reasonCode}` : null,
+        decision.suggestedAction ? `Suggested action: ${decision.suggestedAction}` : null,
+        decision.missingFields && decision.missingFields.length > 0
+          ? `Missing fields: ${decision.missingFields.join(', ')}`
+          : null,
+      ].filter(Boolean);
+
+      return {
+        sessionId: '',
+        reply: lines.join('\n'),
+        toolCalls,
+        requiresConfirmation: false,
+        draftQuote: null,
+        proposedAction: null,
+      };
+    }
+
+    const lines: string[] = [
+      `Best match based on stock, price, and configured rules: ${decision.primaryRecommendation.productName}.`,
+      `Ranking score: ${decision.primaryRecommendation.score}`,
+      decision.appliedRule
+        ? `Applied rule: ${decision.appliedRule.code} (${decision.appliedRule.scope})`
+        : 'Applied rule: none',
+    ];
+
+    if (decision.alternatives.length > 0) {
+      lines.push(`Alternatives: ${decision.alternatives.join(', ')}`);
+    }
+
+    const required = decision.solutionItems.required;
+    const recommended = decision.solutionItems.recommended;
+    const optional = decision.solutionItems.optional;
+
+    if (required.length > 0) lines.push(`Required items: ${required.join(', ')}`);
+    if (recommended.length > 0) lines.push(`Recommended items: ${recommended.join(', ')}`);
+    if (optional.length > 0) lines.push(`Optional items: ${optional.join(', ')}`);
+
+    if (decision.warnings && decision.warnings.length > 0) {
+      lines.push(`Warnings: ${decision.warnings.join(' | ')}`);
+    }
+
+    lines.push(`Recommendation run: ${decision.recommendationRunId}`);
+
+    const suggestedCustomer = await this.resolveSuggestedCustomer(tenantId, []);
+    const accessoryItems = [
+      ...required,
+      ...recommended,
+      ...optional,
+    ];
+
+    const productRows = await this.prisma.product.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { id: decision.primaryRecommendation.productId },
+          ...accessoryItems.map((name) => ({ name })),
+        ],
+      },
+      select: { id: true, name: true, sellingPrice: true },
+    });
+
+    const byName = new Map(productRows.map((p) => [p.name, p]));
+    const byId = new Map(productRows.map((p) => [p.id, p]));
+    const primaryRow = byId.get(decision.primaryRecommendation.productId);
+
+    const requiredAccessoryItems = required.reduce<
+      Array<DraftQuotePreview['items'][number]>
+    >((acc, name) => {
+      const p = byName.get(name);
+      if (p) {
+        acc.push({
+          productId: p.id,
+          name: p.name,
+          quantity: 1,
+          unitPrice: Number(p.sellingPrice),
+          lineTotal: Number(p.sellingPrice),
+          kind: 'ACCESSORY',
+        });
+      }
+      return acc;
+    }, []);
+
+    const recommendedAccessoryItems = recommended.reduce<
+      Array<DraftQuotePreview['items'][number]>
+    >((acc, name) => {
+      const p = byName.get(name);
+      if (p) {
+        acc.push({
+          productId: p.id,
+          name: p.name,
+          quantity: 1,
+          unitPrice: Number(p.sellingPrice),
+          lineTotal: Number(p.sellingPrice),
+          kind: 'ACCESSORY',
+        });
+      }
+      return acc;
+    }, []);
+
     const draftItems: DraftQuotePreview['items'] = [
-      ...(motorItem
+      ...(primaryRow
         ? [
             {
-              productId: motorItem.id,
-              name: motorItem.name,
+              productId: primaryRow.id,
+              name: primaryRow.name,
               quantity: 1,
-              unitPrice: motorItem.price,
-              lineTotal: motorItem.price,
+              unitPrice: Number(primaryRow.sellingPrice),
+              lineTotal: Number(primaryRow.sellingPrice),
               kind: 'MOTOR' as const,
             },
           ]
         : []),
-      ...accessories.map((item) => ({
-        productId: item.id,
-        name: item.name,
-        quantity: item.quantity,
-        unitPrice: item.price,
-        lineTotal: item.total,
-        kind: 'ACCESSORY' as const,
-      })),
+      ...requiredAccessoryItems,
+      ...recommendedAccessoryItems,
     ];
 
-    const accessorySubtotal = accessories.reduce((sum, item) => sum + item.total, 0);
-    const motorSubtotal = motorItem?.price ?? 0;
+    const motorSubtotal = draftItems
+      .filter((i) => i.kind === 'MOTOR')
+      .reduce((s, i) => s + i.lineTotal, 0);
+    const accessorySubtotal = draftItems
+      .filter((i) => i.kind === 'ACCESSORY')
+      .reduce((s, i) => s + i.lineTotal, 0);
     const estimatedTotal = Number((motorSubtotal + accessorySubtotal).toFixed(2));
 
     const confirmationToken = await this.createDraftConfirmationToken(
@@ -690,65 +789,25 @@ export class CopilotService {
       userId,
       sessionDbId,
       {
-        depth,
-        recommendedHp: hp,
-        suggestedCustomerId: suggestedCustomer?.id ?? null,
-        motorProductId: motorItem?.id ?? null,
-        accessories: accessories.map((a) => ({
-          productId: a.id,
-          quantity: a.quantity,
-        })),
+        decisionRunId: decision.recommendationRunId,
+        depth: depthFt,
+        phase: phaseType,
+        budget,
+        primaryProductId: decision.primaryRecommendation.productId,
+        requiredItems: required,
+        recommendedItems: recommended,
       },
     );
 
-    const toolCalls: CopilotToolCall[] = [
-      {
-        tool: 'get_motor_recommendations',
-        resultSummary: `depth=${depth}ft, recommended_hp=${hp}, matched_motors=${motors.length}`,
-      },
-      {
-        tool: 'generate_quotation_materials',
-        resultSummary: `materials=${accessories.length}, subtotal=${accessorySubtotal.toFixed(2)}`,
-      },
-    ];
-
-    const motorSection =
-      motors.length === 0
-        ? 'No direct motor match found in current catalog. Add motor products with HP in the name (for example 1.5 HP Submersible) for precise recommendations.'
-        : [
-            'Recommended motors from your catalog:',
-            ...motors.map(
-              (motor, index) =>
-                `${index + 1}) ${motor.name} - Rs ${motor.price.toFixed(2)}`,
-            ),
-          ].join('\n');
-
-    const accessorySection =
-      accessories.length === 0
-        ? 'No accessory bundle could be prepared from current catalog. Add pipe/cable/panel/fitting items for complete quotation kits.'
-        : [
-            'Accessories oriented to this installation:',
-            ...accessories.map(
-              (item, index) =>
-                `${index + 1}) ${item.name} x ${item.quantity} @ Rs ${item.price.toFixed(2)} = Rs ${item.total.toFixed(2)}`,
-            ),
-            `Subtotal (accessories): Rs ${accessorySubtotal.toFixed(2)}`,
-          ].join('\n');
-
     return {
       sessionId: '',
-      reply: [
-        `For a ${depth} ft borewell, recommended motor capacity is around ${hp}.`,
-        motorSection,
-        accessorySection,
-        'If you want, I can prepare a draft quote payload next for confirmation.',
-      ].join('\n\n'),
+      reply: lines.join('\n'),
       toolCalls,
       requiresConfirmation: true,
       confirmationToken,
       draftQuote: {
-        depth,
-        recommendedHp: hp,
+        depth: depthFt,
+        recommendedHp: 'DecisionEngine',
         suggestedCustomerId: suggestedCustomer?.id,
         suggestedCustomerName: suggestedCustomer?.name,
         itemCount: draftItems.length,
@@ -760,14 +819,15 @@ export class CopilotService {
       proposedAction: {
         type: 'DRAFT_QUOTE',
         payload: {
-          depth,
-          recommendedHp: hp,
+          depth: depthFt,
+          phase: phaseType,
+          budget,
+          recommendationRunId: decision.recommendationRunId,
           suggestedCustomerId: suggestedCustomer?.id ?? null,
-          motorProductId: motorItem?.id ?? null,
-          accessories: accessories.map((a) => ({
-            productId: a.id,
-            quantity: a.quantity,
-          })),
+          motorProductId: decision.primaryRecommendation.productId,
+          accessories: draftItems
+            .filter((i) => i.kind === 'ACCESSORY')
+            .map((i) => ({ productId: i.productId, quantity: i.quantity })),
           estimatedTotal,
           confirmationToken,
         },
@@ -890,6 +950,41 @@ export class CopilotService {
     }
 
     return value;
+  }
+
+  private extractPhase(text: string): 'SINGLE' | 'THREE' | null {
+    const normalized = text.toLowerCase();
+    if (
+      normalized.includes('single phase') ||
+      normalized.includes('single-phase') ||
+      /\bsingle\b/i.test(normalized)
+    ) {
+      return 'SINGLE';
+    }
+
+    if (
+      normalized.includes('three phase') ||
+      normalized.includes('3 phase') ||
+      normalized.includes('three-phase') ||
+      /\bthree\b/i.test(normalized)
+    ) {
+      return 'THREE';
+    }
+
+    return null;
+  }
+
+  private extractBudget(text: string): number | null {
+    const normalized = text.replace(/,/g, '').toLowerCase();
+    const budgetMatch = normalized.match(
+      /(budget|under|within|around|approx(?:imately)?)\s*(?:rs\.?|inr|₹)?\s*(\d{4,9})/i,
+    );
+    if (budgetMatch) return Number(budgetMatch[2]);
+
+    const rupeeMatch = normalized.match(/(?:rs\.?|inr|₹)\s*(\d{4,9})/i);
+    if (rupeeMatch) return Number(rupeeMatch[1]);
+
+    return null;
   }
 
   private async resolveSuggestedCustomer(

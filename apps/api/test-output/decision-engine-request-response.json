@@ -1,0 +1,880 @@
+[
+  {
+    "testCase": "1. Happy path — 3HP single phase",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 330,
+        "phase": "SINGLE",
+        "budget": 50000
+      }
+    },
+    "response": {
+      "recommendationRunId": "c29ccd32-4c8a-4c62-9423-a923a6b7c8b5",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "ae0e6767-f6db-45d2-b6e9-e4b403ae8f31",
+        "code": "BORE_WELL_300_360_SINGLE",
+        "name": "Borewell 300–360 ft Single Phase → 3HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 300–360 ft Single Phase → 3HP\" (platform) matched. Ranked 3 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "sku": "MOT-TEX-3HP-1P",
+        "score": 96,
+        "scoreBreakdown": {
+          "attributeMatch": 40,
+          "stock": 30,
+          "price": 16,
+          "compatibility": 10,
+          "total": 96
+        },
+        "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+      },
+      "alternatives": [
+        "CRI 3HP Single Phase Submersible Motor",
+        "Kirloskar 3HP Single Phase Submersible Motor"
+      ],
+      "solutionItems": {
+        "required": [
+          "3HP Single Phase Motor Starter"
+        ],
+        "recommended": [
+          "4 sqmm Submersible Cable",
+          "Nylon Safety Rope",
+          "32mm HDPE Pipe"
+        ],
+        "optional": [
+          "Non Return Valve"
+        ]
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+          "productName": "Texmo 3HP Single Phase Submersible Motor",
+          "sku": "MOT-TEX-3HP-1P",
+          "sellingPrice": 30500,
+          "stockQty": 15,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 30,
+            "price": 16,
+            "compatibility": 10,
+            "total": 96
+          },
+          "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+        },
+        {
+          "rank": 2,
+          "productId": "9a8ea1a8-a513-4448-bbe1-bc1eb265c421",
+          "productName": "CRI 3HP Single Phase Submersible Motor",
+          "sku": "MOT-CRI-3HP-1P",
+          "sellingPrice": 31500,
+          "stockQty": 8,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 24,
+            "price": 16,
+            "compatibility": 10,
+            "total": 90
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        },
+        {
+          "rank": 3,
+          "productId": "e70d737f-276e-49d4-a64a-ebd8fcfacccc",
+          "productName": "Kirloskar 3HP Single Phase Submersible Motor",
+          "sku": "MOT-KIR-3HP-1P",
+          "sellingPrice": 33500,
+          "stockQty": 2,
+          "scoreBreakdown": {
+            "attributeMatch": 38,
+            "stock": 6,
+            "price": 17,
+            "compatibility": 10,
+            "total": 71
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        }
+      ]
+    }
+  },
+  {
+    "testCase": "2. Lower depth — 2HP single phase",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 250,
+        "phase": "SINGLE",
+        "budget": 40000
+      }
+    },
+    "response": {
+      "recommendationRunId": "42654459-57c9-4e46-9c2e-a367e6fd0de8",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "75c74e8a-4c7b-4a40-9172-920c27ad40f2",
+        "code": "BORE_WELL_200_280_SINGLE",
+        "name": "Borewell 200–280 ft Single Phase → 2HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 200–280 ft Single Phase → 2HP\" (platform) matched. Ranked 2 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "4e00d3be-8d0b-4863-bb4a-0a537a7a93c2",
+        "productName": "CRI 2HP Single Phase Submersible Motor",
+        "sku": "MOT-CRI-2HP-1P",
+        "score": 75,
+        "scoreBreakdown": {
+          "attributeMatch": 40,
+          "stock": 15,
+          "price": 16,
+          "compatibility": 4,
+          "total": 75
+        },
+        "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+      },
+      "alternatives": [
+        "Texmo 2HP Single Phase Submersible Motor"
+      ],
+      "solutionItems": {
+        "required": [],
+        "recommended": [
+          "Nylon Safety Rope"
+        ],
+        "optional": [
+          "Brass Foot Valve"
+        ]
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "4e00d3be-8d0b-4863-bb4a-0a537a7a93c2",
+          "productName": "CRI 2HP Single Phase Submersible Motor",
+          "sku": "MOT-CRI-2HP-1P",
+          "sellingPrice": 22500,
+          "stockQty": 5,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 15,
+            "price": 16,
+            "compatibility": 4,
+            "total": 75
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        },
+        {
+          "rank": 2,
+          "productId": "7dc6414e-ad5e-4cc0-b6e2-23bedc064c23",
+          "productName": "Texmo 2HP Single Phase Submersible Motor",
+          "sku": "MOT-TEX-2HP-1P",
+          "sellingPrice": 21500,
+          "stockQty": 0,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 0,
+            "price": 15,
+            "compatibility": 4,
+            "total": 59
+          },
+          "selectedReason": "Ranked by: strong attribute match, out of stock, compatible with other items in solution."
+        }
+      ]
+    }
+  },
+  {
+    "testCase": "3. Higher depth — 5HP three phase",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 500,
+        "phase": "THREE",
+        "budget": 80000
+      }
+    },
+    "response": {
+      "recommendationRunId": "0ed5813f-c167-4817-953a-3794c14228de",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "e634f892-1183-465a-851d-e45a8c4d1ab3",
+        "code": "BORE_WELL_400_550_THREE",
+        "name": "Borewell 400–550 ft Three Phase → 5HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 400–550 ft Three Phase → 5HP\" (platform) matched. Ranked 1 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "8c6d71fa-bf4f-4d86-b89b-0565ccaae94b",
+        "productName": "CRI 5HP Three Phase Submersible Motor",
+        "sku": "MOT-CRI-5HP-3P",
+        "score": 71,
+        "scoreBreakdown": {
+          "attributeMatch": 35,
+          "stock": 9,
+          "price": 17,
+          "compatibility": 10,
+          "total": 71
+        },
+        "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+      },
+      "alternatives": [],
+      "solutionItems": {
+        "required": [
+          "5HP Three Phase Motor Starter"
+        ],
+        "recommended": [
+          "6 sqmm Submersible Cable",
+          "Nylon Safety Rope",
+          "40mm HDPE Pipe"
+        ],
+        "optional": []
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "8c6d71fa-bf4f-4d86-b89b-0565ccaae94b",
+          "productName": "CRI 5HP Three Phase Submersible Motor",
+          "sku": "MOT-CRI-5HP-3P",
+          "sellingPrice": 52000,
+          "stockQty": 3,
+          "scoreBreakdown": {
+            "attributeMatch": 35,
+            "stock": 9,
+            "price": 17,
+            "compatibility": 10,
+            "total": 71
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        }
+      ]
+    }
+  },
+  {
+    "testCase": "4. Budget pressure — 3HP lower budget",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 330,
+        "phase": "SINGLE",
+        "budget": 31000
+      }
+    },
+    "response": {
+      "recommendationRunId": "a648d482-fe02-490e-8a71-48b0722704ea",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "ae0e6767-f6db-45d2-b6e9-e4b403ae8f31",
+        "code": "BORE_WELL_300_360_SINGLE",
+        "name": "Borewell 300–360 ft Single Phase → 3HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 300–360 ft Single Phase → 3HP\" (platform) matched. Ranked 3 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "sku": "MOT-TEX-3HP-1P",
+        "score": 100,
+        "scoreBreakdown": {
+          "attributeMatch": 40,
+          "stock": 30,
+          "price": 20,
+          "compatibility": 10,
+          "total": 100
+        },
+        "selectedReason": "Ranked by: strong attribute match, good stock availability, within budget, compatible with other items in solution."
+      },
+      "alternatives": [
+        "CRI 3HP Single Phase Submersible Motor",
+        "Kirloskar 3HP Single Phase Submersible Motor"
+      ],
+      "solutionItems": {
+        "required": [
+          "3HP Single Phase Motor Starter"
+        ],
+        "recommended": [
+          "4 sqmm Submersible Cable",
+          "Nylon Safety Rope",
+          "32mm HDPE Pipe"
+        ],
+        "optional": [
+          "Non Return Valve"
+        ]
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+          "productName": "Texmo 3HP Single Phase Submersible Motor",
+          "sku": "MOT-TEX-3HP-1P",
+          "sellingPrice": 30500,
+          "stockQty": 15,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 30,
+            "price": 20,
+            "compatibility": 10,
+            "total": 100
+          },
+          "selectedReason": "Ranked by: strong attribute match, good stock availability, within budget, compatible with other items in solution."
+        },
+        {
+          "rank": 2,
+          "productId": "9a8ea1a8-a513-4448-bbe1-bc1eb265c421",
+          "productName": "CRI 3HP Single Phase Submersible Motor",
+          "sku": "MOT-CRI-3HP-1P",
+          "sellingPrice": 31500,
+          "stockQty": 8,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 24,
+            "price": 0,
+            "compatibility": 10,
+            "total": 74
+          },
+          "selectedReason": "Ranked by: strong attribute match, exceeds budget, compatible with other items in solution."
+        },
+        {
+          "rank": 3,
+          "productId": "e70d737f-276e-49d4-a64a-ebd8fcfacccc",
+          "productName": "Kirloskar 3HP Single Phase Submersible Motor",
+          "sku": "MOT-KIR-3HP-1P",
+          "sellingPrice": 33500,
+          "stockQty": 2,
+          "scoreBreakdown": {
+            "attributeMatch": 38,
+            "stock": 6,
+            "price": 0,
+            "compatibility": 10,
+            "total": 54
+          },
+          "selectedReason": "Ranked by: strong attribute match, exceeds budget, compatible with other items in solution."
+        }
+      ]
+    }
+  },
+  {
+    "testCase": "5. No matching depth",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 380,
+        "phase": "SINGLE",
+        "budget": 50000
+      }
+    },
+    "response": {
+      "recommendationRunId": "0b3b077c-ec43-4f04-bdb0-3917bade5aee",
+      "status": "NO_MATCH",
+      "appliedRule": null,
+      "explanation": "No active rule matched the provided inputs.",
+      "primaryRecommendation": null,
+      "alternatives": [],
+      "solutionItems": {
+        "required": [],
+        "recommended": [],
+        "optional": []
+      },
+      "candidates": [],
+      "missingFields": [],
+      "reasonCode": "NO_RULE_FOR_INPUT",
+      "suggestedAction": "Create a rule for SINGLE phase borewell around 380 ft."
+    }
+  },
+  {
+    "testCase": "6. Missing phase",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 330,
+        "budget": 50000
+      }
+    },
+    "response": {
+      "recommendationRunId": "306a107d-9127-4e19-9b44-08960162ac39",
+      "status": "NO_MATCH",
+      "appliedRule": null,
+      "explanation": "No active rule matched the provided inputs.",
+      "primaryRecommendation": null,
+      "alternatives": [],
+      "solutionItems": {
+        "required": [],
+        "recommended": [],
+        "optional": []
+      },
+      "candidates": [],
+      "missingFields": [
+        "phase"
+      ],
+      "reasonCode": "MISSING_REQUIRED_FIELDS",
+      "suggestedAction": "Please provide required fields: phase."
+    }
+  },
+  {
+    "testCase": "7. Missing depth",
+    "request": {
+      "queryInputs": {
+        "phase": "SINGLE",
+        "budget": 50000
+      }
+    },
+    "response": {
+      "recommendationRunId": "b1e79f42-d171-4895-9a5d-9144d95e8d57",
+      "status": "NO_MATCH",
+      "appliedRule": null,
+      "explanation": "No active rule matched the provided inputs.",
+      "primaryRecommendation": null,
+      "alternatives": [],
+      "solutionItems": {
+        "required": [],
+        "recommended": [],
+        "optional": []
+      },
+      "candidates": [],
+      "missingFields": [
+        "boreDepthFt"
+      ],
+      "reasonCode": "MISSING_REQUIRED_FIELDS",
+      "suggestedAction": "Please provide required fields: boreDepthFt."
+    }
+  },
+  {
+    "testCase": "8. Boundary lower edge",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 300,
+        "phase": "SINGLE",
+        "budget": 50000
+      }
+    },
+    "response": {
+      "recommendationRunId": "77e900de-51e9-420f-a6a3-20a7067e99fc",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "ae0e6767-f6db-45d2-b6e9-e4b403ae8f31",
+        "code": "BORE_WELL_300_360_SINGLE",
+        "name": "Borewell 300–360 ft Single Phase → 3HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 300–360 ft Single Phase → 3HP\" (platform) matched. Ranked 3 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "sku": "MOT-TEX-3HP-1P",
+        "score": 94,
+        "scoreBreakdown": {
+          "attributeMatch": 38,
+          "stock": 30,
+          "price": 16,
+          "compatibility": 10,
+          "total": 94
+        },
+        "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+      },
+      "alternatives": [
+        "CRI 3HP Single Phase Submersible Motor",
+        "Kirloskar 3HP Single Phase Submersible Motor"
+      ],
+      "solutionItems": {
+        "required": [
+          "3HP Single Phase Motor Starter"
+        ],
+        "recommended": [
+          "4 sqmm Submersible Cable",
+          "Nylon Safety Rope",
+          "32mm HDPE Pipe"
+        ],
+        "optional": [
+          "Non Return Valve"
+        ]
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+          "productName": "Texmo 3HP Single Phase Submersible Motor",
+          "sku": "MOT-TEX-3HP-1P",
+          "sellingPrice": 30500,
+          "stockQty": 15,
+          "scoreBreakdown": {
+            "attributeMatch": 38,
+            "stock": 30,
+            "price": 16,
+            "compatibility": 10,
+            "total": 94
+          },
+          "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+        },
+        {
+          "rank": 2,
+          "productId": "9a8ea1a8-a513-4448-bbe1-bc1eb265c421",
+          "productName": "CRI 3HP Single Phase Submersible Motor",
+          "sku": "MOT-CRI-3HP-1P",
+          "sellingPrice": 31500,
+          "stockQty": 8,
+          "scoreBreakdown": {
+            "attributeMatch": 35,
+            "stock": 24,
+            "price": 16,
+            "compatibility": 10,
+            "total": 85
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        },
+        {
+          "rank": 3,
+          "productId": "e70d737f-276e-49d4-a64a-ebd8fcfacccc",
+          "productName": "Kirloskar 3HP Single Phase Submersible Motor",
+          "sku": "MOT-KIR-3HP-1P",
+          "sellingPrice": 33500,
+          "stockQty": 2,
+          "scoreBreakdown": {
+            "attributeMatch": 35,
+            "stock": 6,
+            "price": 17,
+            "compatibility": 10,
+            "total": 68
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        }
+      ]
+    }
+  },
+  {
+    "testCase": "9. Boundary upper edge",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 360,
+        "phase": "SINGLE",
+        "budget": 50000
+      }
+    },
+    "response": {
+      "recommendationRunId": "de21a97a-6fd2-4573-a2e5-449f4c0d62cf",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "ae0e6767-f6db-45d2-b6e9-e4b403ae8f31",
+        "code": "BORE_WELL_300_360_SINGLE",
+        "name": "Borewell 300–360 ft Single Phase → 3HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 300–360 ft Single Phase → 3HP\" (platform) matched. Ranked 3 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "sku": "MOT-TEX-3HP-1P",
+        "score": 96,
+        "scoreBreakdown": {
+          "attributeMatch": 40,
+          "stock": 30,
+          "price": 16,
+          "compatibility": 10,
+          "total": 96
+        },
+        "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+      },
+      "alternatives": [
+        "CRI 3HP Single Phase Submersible Motor",
+        "Kirloskar 3HP Single Phase Submersible Motor"
+      ],
+      "solutionItems": {
+        "required": [
+          "3HP Single Phase Motor Starter"
+        ],
+        "recommended": [
+          "4 sqmm Submersible Cable",
+          "Nylon Safety Rope",
+          "32mm HDPE Pipe"
+        ],
+        "optional": [
+          "Non Return Valve"
+        ]
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+          "productName": "Texmo 3HP Single Phase Submersible Motor",
+          "sku": "MOT-TEX-3HP-1P",
+          "sellingPrice": 30500,
+          "stockQty": 15,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 30,
+            "price": 16,
+            "compatibility": 10,
+            "total": 96
+          },
+          "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+        },
+        {
+          "rank": 2,
+          "productId": "9a8ea1a8-a513-4448-bbe1-bc1eb265c421",
+          "productName": "CRI 3HP Single Phase Submersible Motor",
+          "sku": "MOT-CRI-3HP-1P",
+          "sellingPrice": 31500,
+          "stockQty": 8,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 24,
+            "price": 16,
+            "compatibility": 10,
+            "total": 90
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        },
+        {
+          "rank": 3,
+          "productId": "e70d737f-276e-49d4-a64a-ebd8fcfacccc",
+          "productName": "Kirloskar 3HP Single Phase Submersible Motor",
+          "sku": "MOT-KIR-3HP-1P",
+          "sellingPrice": 33500,
+          "stockQty": 2,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 6,
+            "price": 17,
+            "compatibility": 10,
+            "total": 73
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        }
+      ]
+    }
+  },
+  {
+    "testCase": "10. Wrong phase for depth",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 330,
+        "phase": "THREE",
+        "budget": 50000
+      }
+    },
+    "response": {
+      "recommendationRunId": "1a2518e5-b60e-4ebe-babf-5bacae021a2a",
+      "status": "NO_MATCH",
+      "appliedRule": null,
+      "explanation": "No active rule matched the provided inputs.",
+      "primaryRecommendation": null,
+      "alternatives": [],
+      "solutionItems": {
+        "required": [],
+        "recommended": [],
+        "optional": []
+      },
+      "candidates": [],
+      "missingFields": [],
+      "reasonCode": "NO_RULE_FOR_INPUT",
+      "suggestedAction": "Create a rule for THREE phase borewell around 330 ft."
+    }
+  },
+  {
+    "testCase": "11. Very low budget",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 330,
+        "phase": "SINGLE",
+        "budget": 20000
+      }
+    },
+    "response": {
+      "recommendationRunId": "8c8b1d01-c8cf-4735-a728-50763cdda353",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "ae0e6767-f6db-45d2-b6e9-e4b403ae8f31",
+        "code": "BORE_WELL_300_360_SINGLE",
+        "name": "Borewell 300–360 ft Single Phase → 3HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 300–360 ft Single Phase → 3HP\" (platform) matched. Ranked 3 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "sku": "MOT-TEX-3HP-1P",
+        "score": 80,
+        "scoreBreakdown": {
+          "attributeMatch": 40,
+          "stock": 30,
+          "price": 0,
+          "compatibility": 10,
+          "total": 80
+        },
+        "selectedReason": "Ranked by: strong attribute match, good stock availability, exceeds budget, compatible with other items in solution."
+      },
+      "alternatives": [
+        "CRI 3HP Single Phase Submersible Motor",
+        "Kirloskar 3HP Single Phase Submersible Motor"
+      ],
+      "solutionItems": {
+        "required": [
+          "3HP Single Phase Motor Starter"
+        ],
+        "recommended": [
+          "4 sqmm Submersible Cable",
+          "Nylon Safety Rope",
+          "32mm HDPE Pipe"
+        ],
+        "optional": [
+          "Non Return Valve"
+        ]
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+          "productName": "Texmo 3HP Single Phase Submersible Motor",
+          "sku": "MOT-TEX-3HP-1P",
+          "sellingPrice": 30500,
+          "stockQty": 15,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 30,
+            "price": 0,
+            "compatibility": 10,
+            "total": 80
+          },
+          "selectedReason": "Ranked by: strong attribute match, good stock availability, exceeds budget, compatible with other items in solution."
+        },
+        {
+          "rank": 2,
+          "productId": "9a8ea1a8-a513-4448-bbe1-bc1eb265c421",
+          "productName": "CRI 3HP Single Phase Submersible Motor",
+          "sku": "MOT-CRI-3HP-1P",
+          "sellingPrice": 31500,
+          "stockQty": 8,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 24,
+            "price": 0,
+            "compatibility": 10,
+            "total": 74
+          },
+          "selectedReason": "Ranked by: strong attribute match, exceeds budget, compatible with other items in solution."
+        },
+        {
+          "rank": 3,
+          "productId": "e70d737f-276e-49d4-a64a-ebd8fcfacccc",
+          "productName": "Kirloskar 3HP Single Phase Submersible Motor",
+          "sku": "MOT-KIR-3HP-1P",
+          "sellingPrice": 33500,
+          "stockQty": 2,
+          "scoreBreakdown": {
+            "attributeMatch": 38,
+            "stock": 6,
+            "price": 0,
+            "compatibility": 10,
+            "total": 54
+          },
+          "selectedReason": "Ranked by: strong attribute match, exceeds budget, compatible with other items in solution."
+        }
+      ],
+      "warnings": [
+        "Recommended products exceed the provided budget of Rs 20,000."
+      ]
+    }
+  },
+  {
+    "testCase": "12. No budget",
+    "request": {
+      "queryInputs": {
+        "boreDepthFt": 330,
+        "phase": "SINGLE"
+      }
+    },
+    "response": {
+      "recommendationRunId": "b959e039-e334-4cce-9001-a0e017708ec0",
+      "status": "MATCHED",
+      "appliedRule": {
+        "id": "ae0e6767-f6db-45d2-b6e9-e4b403ae8f31",
+        "code": "BORE_WELL_300_360_SINGLE",
+        "name": "Borewell 300–360 ft Single Phase → 3HP",
+        "version": 1,
+        "scope": "platform"
+      },
+      "explanation": "Rule \"Borewell 300–360 ft Single Phase → 3HP\" (platform) matched. Ranked 3 primary product candidate(s), and expanded accessories separately.",
+      "primaryRecommendation": {
+        "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "sku": "MOT-TEX-3HP-1P",
+        "score": 100,
+        "scoreBreakdown": {
+          "attributeMatch": 40,
+          "stock": 30,
+          "price": 20,
+          "compatibility": 10,
+          "total": 100
+        },
+        "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+      },
+      "alternatives": [
+        "CRI 3HP Single Phase Submersible Motor",
+        "Kirloskar 3HP Single Phase Submersible Motor"
+      ],
+      "solutionItems": {
+        "required": [
+          "3HP Single Phase Motor Starter"
+        ],
+        "recommended": [
+          "4 sqmm Submersible Cable",
+          "Nylon Safety Rope",
+          "32mm HDPE Pipe"
+        ],
+        "optional": [
+          "Non Return Valve"
+        ]
+      },
+      "candidates": [
+        {
+          "rank": 1,
+          "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+          "productName": "Texmo 3HP Single Phase Submersible Motor",
+          "sku": "MOT-TEX-3HP-1P",
+          "sellingPrice": 30500,
+          "stockQty": 15,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 30,
+            "price": 20,
+            "compatibility": 10,
+            "total": 100
+          },
+          "selectedReason": "Ranked by: strong attribute match, good stock availability, compatible with other items in solution."
+        },
+        {
+          "rank": 2,
+          "productId": "9a8ea1a8-a513-4448-bbe1-bc1eb265c421",
+          "productName": "CRI 3HP Single Phase Submersible Motor",
+          "sku": "MOT-CRI-3HP-1P",
+          "sellingPrice": 31500,
+          "stockQty": 8,
+          "scoreBreakdown": {
+            "attributeMatch": 40,
+            "stock": 24,
+            "price": 20,
+            "compatibility": 10,
+            "total": 94
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        },
+        {
+          "rank": 3,
+          "productId": "e70d737f-276e-49d4-a64a-ebd8fcfacccc",
+          "productName": "Kirloskar 3HP Single Phase Submersible Motor",
+          "sku": "MOT-KIR-3HP-1P",
+          "sellingPrice": 33500,
+          "stockQty": 2,
+          "scoreBreakdown": {
+            "attributeMatch": 38,
+            "stock": 6,
+            "price": 19,
+            "compatibility": 10,
+            "total": 73
+          },
+          "selectedReason": "Ranked by: strong attribute match, compatible with other items in solution."
+        }
+      ]
+    }
+  }
+]
