@@ -13,6 +13,7 @@ import type {
   CandidateResult,
   ScoreBreakdown,
   AppliedRule,
+  SolutionItems,
 } from './dto/recommend-solution-response.type';
 
 // ---------------------------------------------------------------------------
@@ -84,7 +85,9 @@ export class DecisionService {
         status: 'ERROR',
         appliedRule: null,
         explanation: 'An unexpected error occurred while evaluating your request.',
-        selectedProducts: [],
+        primaryRecommendation: null,
+        alternatives: [],
+        solutionItems: { required: [], recommended: [], optional: [] },
         candidates: [],
         errorMessage: message,
       };
@@ -97,7 +100,7 @@ export class DecisionService {
 
   private async executeDecision(
     tenantId: string,
-    userId: string,
+    _userId: string,
     dto: RecommendSolutionDto,
     runId: string,
   ): Promise<RecommendSolutionResponse> {
@@ -117,7 +120,9 @@ export class DecisionService {
         status: 'NO_MATCH',
         appliedRule: null,
         explanation: `No active rule matched the provided inputs.`,
-        selectedProducts: [],
+        primaryRecommendation: null,
+        alternatives: [],
+        solutionItems: { required: [], recommended: [], optional: [] },
         candidates: [],
         missingFields,
       };
@@ -131,52 +136,92 @@ export class DecisionService {
       scope: matchedRule.tenantId ? 'tenant' : 'platform',
     };
 
-    // 2. Expand the solution template into a product list to evaluate
-    const productIds = await this.expandTemplate(
-      tenantId,
-      matchedRule.solutionTemplateId,
-    );
+    // 2. Expand template and identify the primary category to rank.
+    const templateItems = await this.loadTemplateItems(matchedRule.solutionTemplateId);
+    const primaryCategoryId = await this.getPrimaryCategoryId(templateItems);
 
-    if (productIds.length === 0) {
+    if (!primaryCategoryId) {
       return {
         recommendationRunId: runId,
         status: 'NO_MATCH',
         appliedRule,
-        explanation: `Rule "${matchedRule.code}" matched but its solution template has no products.`,
-        selectedProducts: [],
+        explanation: `Rule "${matchedRule.code}" matched but no primary product category was found in template.`,
+        primaryRecommendation: null,
+        alternatives: [],
+        solutionItems: { required: [], recommended: [], optional: [] },
         candidates: [],
         missingFields: [],
       };
     }
 
-    // 3. Load products with stock
-    const products = await this.loadProductsWithStock(tenantId, productIds);
-
-    // 4. Rank deterministically
-    const ranked = await this.rankProducts(
+    // 3. Build primary target profile from first REQUIRED primary item.
+    const primaryProfile = await this.getPrimaryProfile(
       tenantId,
-      products,
-      dto.queryInputs,
-      productIds,
+      templateItems,
+      primaryCategoryId,
     );
 
-    // 5. Persist candidates
+    // 4. Load all products in the primary category and keep only primary-like alternatives.
+    const primaryCandidates = await this.loadPrimaryCandidates(
+      tenantId,
+      primaryCategoryId,
+      primaryProfile,
+    );
+
+    if (primaryCandidates.length === 0) {
+      return {
+        recommendationRunId: runId,
+        status: 'NO_MATCH',
+        appliedRule,
+        explanation:
+          'Rule matched but no eligible primary products were found in stock catalog for this tenant.',
+        primaryRecommendation: null,
+        alternatives: [],
+        solutionItems: { required: [], recommended: [], optional: [] },
+        candidates: [],
+        missingFields: [],
+      };
+    }
+
+    // 5. Rank primary products deterministically.
+    const ranked = await this.rankProducts(
+      primaryCandidates,
+      dto.queryInputs,
+      primaryProfile,
+    );
+
+    // 6. Persist primary candidates only.
     await this.persistCandidates(runId, ranked);
 
-    // The "selected" products are REQUIRED items from the template at the top ranks
-    const requiredIds = await this.getRequiredProductIds(
-      matchedRule.solutionTemplateId,
+    // 7. Build grouped solution items separately from primary ranking.
+    const solutionItems = await this.buildSolutionItems(
+      tenantId,
+      ranked[0]?.productId ?? null,
+      templateItems,
+      primaryCategoryId,
     );
-    const selectedProducts = ranked.filter((c) =>
-      requiredIds.includes(c.productId),
-    );
+
+    const primaryRecommendation = ranked[0]
+      ? {
+          productId: ranked[0].productId,
+          productName: ranked[0].productName,
+          sku: ranked[0].sku,
+          score: ranked[0].scoreBreakdown.total,
+          scoreBreakdown: ranked[0].scoreBreakdown,
+          selectedReason: ranked[0].selectedReason,
+        }
+      : null;
+
+    const alternatives = ranked.slice(1).map((c) => c.productName);
 
     return {
       recommendationRunId: runId,
       status: 'MATCHED',
       appliedRule,
-      explanation: `Rule "${matchedRule.name}" (${appliedRule.scope}) matched. ${ranked.length} candidate(s) ranked deterministically.`,
-      selectedProducts,
+      explanation: `Rule "${matchedRule.name}" (${appliedRule.scope}) matched. Ranked ${ranked.length} primary product candidate(s), and expanded accessories separately.`,
+      primaryRecommendation,
+      alternatives,
+      solutionItems,
       candidates: ranked,
     };
   }
@@ -189,22 +234,29 @@ export class DecisionService {
     tenantId: string,
     queryInputs: Record<string, string | number | boolean>,
   ) {
-    // Fetch all ACTIVE rules for this tenant + platform rules
-    const rules = await this.prisma.decisionRule.findMany({
+    const tenantRules = await this.prisma.decisionRule.findMany({
       where: {
         status: DecisionRuleStatus.ACTIVE,
         active: true,
-        OR: [{ tenantId }, { tenantId: null }],
+        tenantId,
       },
       orderBy: [
-        // Tenant-specific first (null tenantId comes last)
-        { tenantId: 'asc' },
-        // Then by explicit priority (lower number = higher priority)
         { priority: 'asc' },
-        // Then by latest version
         { version: 'desc' },
       ],
     });
+
+    const platformRules = await this.prisma.decisionRule.findMany({
+      where: {
+        status: DecisionRuleStatus.ACTIVE,
+        active: true,
+        tenantId: null,
+      },
+      orderBy: [{ priority: 'asc' }, { version: 'desc' }],
+    });
+
+    // Tenant-specific ACTIVE rules override platform ACTIVE rules.
+    const rules = [...tenantRules, ...platformRules];
 
     // Evaluate each rule's conditions JSON against the query inputs
     for (const rule of rules) {
@@ -265,61 +317,90 @@ export class DecisionService {
     queryInputs: Record<string, string | number | boolean>,
   ): string[] {
     // Common expected fields for motor/borewell decision engine
-    const commonFields = ['depth', 'phase'];
+    const commonFields = ['boreDepthFt', 'phase'];
     return commonFields.filter((f) => queryInputs[f] === undefined);
   }
 
   // =========================================================================
-  // TEMPLATE EXPANSION
+  // TEMPLATE AND PRIMARY EXTRACTION
   // =========================================================================
 
-  private async expandTemplate(
-    tenantId: string,
+  private async loadTemplateItems(
     solutionTemplateId: string | null,
-  ): Promise<string[]> {
+  ) {
     if (!solutionTemplateId) return [];
 
-    const items = await this.prisma.solutionTemplateItem.findMany({
+    return this.prisma.solutionTemplateItem.findMany({
       where: { solutionTemplateId },
       orderBy: [{ requirementType: 'asc' }, { priority: 'asc' }],
     });
-
-    // Collect unique productIds that are directly specified
-    const productIds = new Set<string>();
-    for (const item of items) {
-      if (item.productId) productIds.add(item.productId);
-    }
-
-    return Array.from(productIds);
   }
 
-  private async getRequiredProductIds(
-    solutionTemplateId: string | null,
-  ): Promise<string[]> {
-    if (!solutionTemplateId) return [];
+  private async getPrimaryCategoryId(
+    items: Awaited<ReturnType<typeof this.loadTemplateItems>>,
+  ): Promise<string | null> {
+    const requiredProductIds = items
+      .filter((i) => i.requirementType === RequirementType.REQUIRED && i.productId)
+      .map((i) => i.productId as string);
 
-    const items = await this.prisma.solutionTemplateItem.findMany({
+    if (requiredProductIds.length === 0) return null;
+
+    const primaryProduct = await this.prisma.product.findFirst({
+      where: { id: { in: requiredProductIds } },
+      select: { categoryId: true },
+    });
+
+    return primaryProduct?.categoryId ?? null;
+  }
+
+  private async getPrimaryProfile(
+    tenantId: string,
+    items: Awaited<ReturnType<typeof this.loadTemplateItems>>,
+    primaryCategoryId: string,
+  ): Promise<Record<string, string | number>> {
+    const requiredProductIds = items
+      .filter((i) => i.requirementType === RequirementType.REQUIRED && i.productId)
+      .map((i) => i.productId as string);
+
+    const primarySeed = await this.prisma.product.findFirst({
       where: {
-        solutionTemplateId,
-        requirementType: RequirementType.REQUIRED,
+        tenantId,
+        categoryId: primaryCategoryId,
+        id: { in: requiredProductIds },
+      },
+      include: {
+        attributeValues: {
+          include: { attributeDefinition: true },
+        },
       },
     });
 
-    return items.filter((i) => i.productId).map((i) => i.productId as string);
+    if (!primarySeed) return {};
+
+    const profile: Record<string, string | number> = {};
+    for (const av of primarySeed.attributeValues) {
+      const code = av.attributeDefinition.code;
+      if (av.valueNumber !== null) profile[code] = Number(av.valueNumber);
+      else if (av.valueText !== null) profile[code] = av.valueText;
+      else if (av.valueBoolean !== null) profile[code] = av.valueBoolean ? 1 : 0;
+    }
+
+    return profile;
   }
 
   // =========================================================================
-  // PRODUCT LOADING
+  // PRIMARY CANDIDATE LOADING
   // =========================================================================
 
-  private async loadProductsWithStock(
+  private async loadPrimaryCandidates(
     tenantId: string,
-    productIds: string[],
+    primaryCategoryId: string,
+    primaryProfile: Record<string, string | number>,
   ) {
     const products = await this.prisma.product.findMany({
       where: {
-        id: { in: productIds },
         tenantId,
+        categoryId: primaryCategoryId,
         active: true,
       },
       include: {
@@ -336,19 +417,130 @@ export class DecisionService {
       },
     });
 
-    return products;
+    const expectedHp = primaryProfile.HP;
+    const expectedPhase = primaryProfile.PHASE;
+
+    // Keep alternatives in same primary category and same primary profile bucket.
+    return products.filter((p) => {
+      const map = this.getAttributeMap(p.attributeValues);
+      const hpOk =
+        expectedHp === undefined ||
+        (map.HP !== undefined && Number(map.HP) === Number(expectedHp));
+      const phaseOk =
+        expectedPhase === undefined ||
+        (map.PHASE !== undefined &&
+          String(map.PHASE).toUpperCase() === String(expectedPhase).toUpperCase());
+
+      return hpOk && phaseOk;
+    });
+  }
+
+  private getAttributeMap(
+    attributeValues: Array<{
+      valueText: string | null;
+      valueNumber: Prisma.Decimal | null;
+      valueBoolean: boolean | null;
+      attributeDefinition: { code: string };
+    }>,
+  ): Record<string, string | number | boolean> {
+    const map: Record<string, string | number | boolean> = {};
+    for (const av of attributeValues) {
+      if (av.valueNumber !== null) map[av.attributeDefinition.code] = Number(av.valueNumber);
+      else if (av.valueText !== null) map[av.attributeDefinition.code] = av.valueText;
+      else if (av.valueBoolean !== null) map[av.attributeDefinition.code] = av.valueBoolean;
+    }
+    return map;
+  }
+
+  // =========================================================================
+  // SOLUTION ITEMS
+  // =========================================================================
+
+  private async buildSolutionItems(
+    tenantId: string,
+    primaryProductId: string | null,
+    templateItems: Awaited<ReturnType<typeof this.loadTemplateItems>>,
+    primaryCategoryId: string,
+  ): Promise<SolutionItems> {
+    const required = new Set<string>();
+    const recommended = new Set<string>();
+    const optional = new Set<string>();
+
+    const productIds = templateItems
+      .filter((item) => item.productId)
+      .map((item) => item.productId as string);
+
+    const templateProducts = await this.prisma.product.findMany({
+      where: {
+        tenantId,
+        id: { in: productIds },
+      },
+      select: {
+        id: true,
+        name: true,
+        categoryId: true,
+      },
+    });
+
+    const productMap = new Map(templateProducts.map((p) => [p.id, p]));
+
+    for (const item of templateItems) {
+      if (!item.productId) continue;
+      const product = productMap.get(item.productId);
+      if (!product) continue;
+
+      // Exclude primary products from accessory list.
+      if (product.categoryId === primaryCategoryId) continue;
+
+      if (item.requirementType === RequirementType.REQUIRED) {
+        required.add(product.name);
+      } else if (item.requirementType === RequirementType.RECOMMENDED) {
+        recommended.add(product.name);
+      } else {
+        optional.add(product.name);
+      }
+    }
+
+    // Add compatibility-based extras from chosen primary recommendation.
+    if (primaryProductId) {
+      const links = await this.prisma.productCompatibility.findMany({
+        where: {
+          tenantId,
+          sourceProductId: primaryProductId,
+          active: true,
+        },
+        include: {
+          target: true,
+        },
+      });
+
+      for (const link of links) {
+        if (link.target.categoryId === primaryCategoryId) continue;
+
+        if (link.relationType === 'REQUIRED_WITH') {
+          required.add(link.target.name);
+        } else if (link.relationType === 'RECOMMENDED_WITH') {
+          recommended.add(link.target.name);
+        }
+      }
+    }
+
+    return {
+      required: Array.from(required),
+      recommended: Array.from(recommended),
+      optional: Array.from(optional),
+    };
   }
 
   // =========================================================================
   // DETERMINISTIC RANKING
   // =========================================================================
 
-  private async rankProducts(
-    tenantId: string,
-    products: Awaited<ReturnType<typeof this.loadProductsWithStock>>,
+  private rankProducts(
+    products: Awaited<ReturnType<typeof this.loadPrimaryCandidates>>,
     queryInputs: Record<string, string | number | boolean>,
-    templateProductIds: string[],
-  ): Promise<CandidateResult[]> {
+    primaryProfile: Record<string, string | number>,
+  ): CandidateResult[] {
     // Compute price reference for price scoring (median of template products)
     const prices = products
       .map((p) => Number(p.sellingPrice))
@@ -362,10 +554,14 @@ export class DecisionService {
         : 0;
 
       const breakdown: ScoreBreakdown = {
-        attributeMatch: this.scoreAttributeMatch(product.attributeValues, queryInputs),
+        attributeMatch: this.scoreAttributeMatch(
+          this.getAttributeMap(product.attributeValues),
+          queryInputs,
+          primaryProfile,
+        ),
         stock: this.scoreStock(stockQty),
         price: this.scorePrice(Number(product.sellingPrice), medianPrice, queryInputs),
-        compatibility: this.scoreCompatibility(product.sourceCompatibilities, templateProductIds),
+        compatibility: this.scoreCompatibility(product.sourceCompatibilities),
         total: 0,
       };
 
@@ -413,41 +609,43 @@ export class DecisionService {
    * Each matching attribute earns a proportional share of 40 pts.
    */
   private scoreAttributeMatch(
-    attributeValues: Array<{
-      valueText: string | null;
-      valueNumber: Prisma.Decimal | null;
-      valueBoolean: boolean | null;
-      attributeDefinition: { code: string };
-    }>,
+    productAttributes: Record<string, string | number | boolean>,
     queryInputs: Record<string, string | number | boolean>,
+    primaryProfile: Record<string, string | number>,
   ): number {
-    const queryKeys = Object.keys(queryInputs);
-    if (queryKeys.length === 0) return 0;
+    let score = 0;
 
-    let matched = 0;
-    for (const av of attributeValues) {
-      const code = av.attributeDefinition.code.toLowerCase();
-      const queryVal = queryInputs[code] ?? queryInputs[av.attributeDefinition.code];
-      if (queryVal === undefined) continue;
-
-      const productVal =
-        av.valueText ?? (av.valueNumber !== null ? Number(av.valueNumber) : null) ?? av.valueBoolean;
-
-      if (productVal !== null && productVal !== undefined) {
-        if (typeof queryVal === 'number' && typeof productVal === 'number') {
-          // For numeric attributes in query, allow ±10% tolerance
-          const ratio = productVal / queryVal;
-          if (ratio >= 0.9 && ratio <= 1.1) matched++;
-        } else if (String(productVal).toLowerCase() === String(queryVal).toLowerCase()) {
-          matched++;
-        }
-      }
+    // HP alignment to rule's primary profile (strong signal)
+    if (
+      primaryProfile.HP !== undefined &&
+      productAttributes.HP !== undefined &&
+      Number(primaryProfile.HP) === Number(productAttributes.HP)
+    ) {
+      score += 16;
     }
 
-    // Normalise to 0–40
-    const matchable = Math.min(queryKeys.length, attributeValues.length);
-    if (matchable === 0) return 0;
-    return Math.round((matched / matchable) * WEIGHT_ATTRIBUTE);
+    // PHASE exact match against query
+    const queryPhase = queryInputs.phase;
+    if (
+      queryPhase !== undefined &&
+      productAttributes.PHASE !== undefined &&
+      String(productAttributes.PHASE).toUpperCase() === String(queryPhase).toUpperCase()
+    ) {
+      score += 12;
+    }
+
+    // HEAD proximity against bore depth query
+    const boreDepthFt = Number(queryInputs.boreDepthFt ?? queryInputs.depth ?? NaN);
+    const head = productAttributes.HEAD !== undefined ? Number(productAttributes.HEAD) : NaN;
+    if (!Number.isNaN(boreDepthFt) && !Number.isNaN(head)) {
+      const diff = Math.abs(head - boreDepthFt);
+      if (diff <= 20) score += 12;
+      else if (diff <= 40) score += 10;
+      else if (diff <= 60) score += 7;
+      else if (diff <= 100) score += 4;
+    }
+
+    return Math.min(score, WEIGHT_ATTRIBUTE);
   }
 
   /**
@@ -499,20 +697,13 @@ export class DecisionService {
    */
   private scoreCompatibility(
     sourceCompatibilities: Array<{ targetProductId: string; relationType: string }>,
-    templateProductIds: string[],
   ): number {
     if (sourceCompatibilities.length === 0) return 0;
 
-    const linkedToTemplate = sourceCompatibilities.filter((c) =>
-      templateProductIds.includes(c.targetProductId),
-    );
-
-    if (linkedToTemplate.length === 0) return 0;
-
-    const requiredLinks = linkedToTemplate.filter(
+    const requiredLinks = sourceCompatibilities.filter(
       (c) => c.relationType === 'REQUIRED_WITH',
     ).length;
-    const recommendedLinks = linkedToTemplate.filter(
+    const recommendedLinks = sourceCompatibilities.filter(
       (c) => c.relationType === 'RECOMMENDED_WITH',
     ).length;
 
@@ -522,7 +713,7 @@ export class DecisionService {
 
   private buildSelectedReason(
     breakdown: ScoreBreakdown,
-    stockQty: number,
+    _stockQty: number,
     queryInputs: Record<string, string | number | boolean>,
   ): string {
     const parts: string[] = [];

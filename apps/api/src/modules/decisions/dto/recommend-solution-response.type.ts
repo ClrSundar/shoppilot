@@ -17,6 +17,21 @@ export interface CandidateResult {
   selectedReason: string;
 }
 
+export interface PrimaryRecommendation {
+  productId: string;
+  productName: string;
+  sku: string;
+  score: number;
+  scoreBreakdown: ScoreBreakdown;
+  selectedReason: string;
+}
+
+export interface SolutionItems {
+  required: string[];
+  recommended: string[];
+  optional: string[];
+}
+
 export interface AppliedRule {
   id: string;
   code: string;
@@ -32,7 +47,10 @@ export interface RecommendSolutionResponse {
   appliedRule: AppliedRule | null;
   explanation: string;
 
-  selectedProducts: CandidateResult[];
+  primaryRecommendation: PrimaryRecommendation | null;
+  alternatives: string[];
+  solutionItems: SolutionItems;
+
   candidates: CandidateResult[];
 
   // Present when status = NO_MATCH
