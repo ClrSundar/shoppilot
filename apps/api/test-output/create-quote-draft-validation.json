@@ -1,0 +1,144 @@
+{
+  "executedAt": "2026-07-06T08:39:03.945Z",
+  "request": {
+    "message": "I have a borewell of depth 320ft and single phase supply with budget 50000. Recommend motor and accessories."
+  },
+  "chatResponseSummary": {
+    "sessionId": "session-1783327143856-3phx6l",
+    "recommendationStatus": "MATCHED",
+    "appliedRule": "BORE_WELL_300_360_SINGLE",
+    "primaryRecommendation": "Texmo 3HP Single Phase Submersible Motor",
+    "draftItemCount": 5,
+    "draftEstimatedTotal": 35181,
+    "warnings": [
+      "Budget comparison is based on the motor price. Final total includes selected accessories."
+    ],
+    "solutionItems": {
+      "required": [
+        "3HP Single Phase Motor Starter"
+      ],
+      "recommended": [
+        "4 sqmm Submersible Cable",
+        "Nylon Safety Rope",
+        "32mm HDPE Pipe"
+      ],
+      "optional": [
+        "Non Return Valve"
+      ]
+    }
+  },
+  "confirmPayload": {
+    "sessionId": "session-1783327143856-3phx6l",
+    "confirmationToken": "cpt_rpj761dh_mr8yxqs7",
+    "idempotencyKey": "manual-validate-1783327143913",
+    "customerId": "e7d5a4d0-38b4-45e9-bee0-0fae37f2b50d",
+    "motorProductId": "ddb8e601-3402-44f1-b540-e36563629639",
+    "accessories": [
+      {
+        "productId": "ac63af73-e788-4a3c-baa7-2acfde3d32e8",
+        "quantity": 1
+      },
+      {
+        "productId": "571b796a-2c34-44c8-b9f1-d0bebc93788f",
+        "quantity": 1
+      },
+      {
+        "productId": "cfbc7cf9-0daa-4a0c-878a-91379d40fe21",
+        "quantity": 1
+      },
+      {
+        "productId": "d6573fb0-ad0a-4f7f-968f-403db00b5365",
+        "quantity": 1
+      }
+    ],
+    "depth": 320,
+    "recommendedHp": "DecisionEngine"
+  },
+  "confirmResponse": {
+    "success": true,
+    "quoteId": "fe3044d8-f83b-42d4-b326-f69e88c6a72e",
+    "quoteNumber": "QT-00001",
+    "status": "DRAFT",
+    "totalAmount": 35181,
+    "customer": {
+      "id": "e7d5a4d0-38b4-45e9-bee0-0fae37f2b50d",
+      "name": "Demo Walk-in Customer"
+    },
+    "idempotentReplay": false
+  },
+  "quoteSnapshot": {
+    "quoteId": "fe3044d8-f83b-42d4-b326-f69e88c6a72e",
+    "quoteNumber": "QT-00001",
+    "status": "DRAFT",
+    "totalAmount": "35181",
+    "subtotal": "35181",
+    "taxAmount": "0",
+    "customer": {
+      "id": "e7d5a4d0-38b4-45e9-bee0-0fae37f2b50d",
+      "tenantId": "8e74a5d3-c976-4d7c-ba87-9e77feffb85c",
+      "name": "Demo Walk-in Customer",
+      "phone": "9999999999",
+      "whatsappNumber": null,
+      "email": null,
+      "address": null,
+      "gstNumber": null,
+      "active": true,
+      "createdAt": "2026-07-06T08:39:03.909Z",
+      "updatedAt": "2026-07-06T08:39:03.909Z"
+    },
+    "items": [
+      {
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "quantity": "1",
+        "unitPrice": "30500",
+        "lineTotal": "30500"
+      },
+      {
+        "productName": "3HP Single Phase Motor Starter",
+        "quantity": "1",
+        "unitPrice": "4500",
+        "lineTotal": "4500"
+      },
+      {
+        "productName": "4 sqmm Submersible Cable",
+        "quantity": "1",
+        "unitPrice": "95",
+        "lineTotal": "95"
+      },
+      {
+        "productName": "Nylon Safety Rope",
+        "quantity": "1",
+        "unitPrice": "18",
+        "lineTotal": "18"
+      },
+      {
+        "productName": "32mm HDPE Pipe",
+        "quantity": "1",
+        "unitPrice": "68",
+        "lineTotal": "68"
+      }
+    ]
+  },
+  "validation": {
+    "expectedOptionalNames": [
+      "Non Return Valve"
+    ],
+    "optionalNamesPresentInQuote": [],
+    "optionalExcludedAsExpected": true,
+    "itemNamesInDraft": [
+      "Texmo 3HP Single Phase Submersible Motor",
+      "3HP Single Phase Motor Starter",
+      "4 sqmm Submersible Cable",
+      "Nylon Safety Rope",
+      "32mm HDPE Pipe"
+    ],
+    "itemNamesInQuote": [
+      "Texmo 3HP Single Phase Submersible Motor",
+      "3HP Single Phase Motor Starter",
+      "4 sqmm Submersible Cable",
+      "Nylon Safety Rope",
+      "32mm HDPE Pipe"
+    ],
+    "draftVsQuoteItemCountMatches": true
+  }
+}

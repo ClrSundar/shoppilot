@@ -366,7 +366,7 @@ export class DecisionService {
     if (!top) return undefined;
 
     const warnings: string[] = [
-      'Budget check currently covers the primary product only. Accessories are not included in this budget check.',
+      'Budget comparison is based on the motor price. Final total includes selected accessories.',
     ];
 
     if (top.sellingPrice > budget) {
