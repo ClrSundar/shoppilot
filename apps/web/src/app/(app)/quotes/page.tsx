@@ -23,8 +23,12 @@ import { productsService } from '@/services/products.service';
 import { customersService } from '@/services/customers.service';
 import { inventoryService } from '@/services/inventory.service';
 import { agentsService } from '@/services/agents.service';
+import {
+  tenantSettingsService,
+  type AgentDiscountConfigItem,
+} from '@/services/tenant-settings.service';
 import { Select, FormControl, InputLabel } from '@mui/material';
-import type { QuoteStatus } from '@/services/quotes.service';
+import type { AgentCategory, QuoteStatus } from '@/services/quotes.service';
 
 type QuoteDraftItem = {
   productId: string;
@@ -32,6 +36,18 @@ type QuoteDraftItem = {
   quantity: number;
   unitPrice: number;
 };
+
+const FALLBACK_AGENT_CATEGORY_OPTIONS: AgentDiscountConfigItem[] = [
+  { category: 'ENGINEER', label: 'Engineer', defaultDiscountPercentage: 5 },
+  {
+    category: 'EXISTING_CUSTOMER',
+    label: 'Existing Customer',
+    defaultDiscountPercentage: 2,
+  },
+  { category: 'DEALER', label: 'Dealer', defaultDiscountPercentage: 3 },
+  { category: 'CONTRACTOR', label: 'Contractor', defaultDiscountPercentage: 4 },
+  { category: 'OTHER', label: 'Other', defaultDiscountPercentage: 0 },
+];
 
 export default function QuotesPage() {
   const queryClient = useQueryClient();
@@ -51,6 +67,8 @@ export default function QuotesPage() {
   const [customerId, setCustomerId] = useState('');
   const [agentId, setAgentId] = useState('');
   const [agentCommissionPercentage, setAgentCommissionPercentage] = useState('');
+  const [agentCategory, setAgentCategory] = useState<AgentCategory | ''>('');
+  const [discountPercentage, setDiscountPercentage] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [notes, setNotes] = useState('');
@@ -60,6 +78,10 @@ export default function QuotesPage() {
   const [editAgentId, setEditAgentId] = useState('');
   const [editAgentCommissionPercentage, setEditAgentCommissionPercentage] =
     useState('');
+  const [editAgentCategory, setEditAgentCategory] = useState<
+    AgentCategory | ''
+  >('');
+  const [editDiscountPercentage, setEditDiscountPercentage] = useState('');
   const [editProductId, setEditProductId] = useState('');
   const [editQuantity, setEditQuantity] = useState('1');
   const [editNotes, setEditNotes] = useState('');
@@ -96,6 +118,24 @@ export default function QuotesPage() {
     queryFn: inventoryService.getStocks,
   });
 
+  const { data: agentDiscountConfig } = useQuery({
+    queryKey: ['tenant-settings', 'agent-discounts'],
+    queryFn: tenantSettingsService.getAgentDiscountConfig,
+  });
+
+  const agentCategoryOptions =
+    agentDiscountConfig?.items?.length
+      ? agentDiscountConfig.items
+      : FALLBACK_AGENT_CATEGORY_OPTIONS;
+
+  const defaultDiscountByCategory = new Map(
+    agentCategoryOptions.map((item) => [item.category, item.defaultDiscountPercentage]),
+  );
+
+  const categoryLabelByValue = new Map(
+    agentCategoryOptions.map((item) => [item.category, item.label]),
+  );
+
   const createMutation = useMutation({
     mutationFn: quotesService.create,
     onSuccess: () => {
@@ -105,6 +145,8 @@ export default function QuotesPage() {
       setCustomerId('');
       setAgentId('');
       setAgentCommissionPercentage('');
+      setAgentCategory('');
+      setDiscountPercentage('');
       setProductId('');
       setQuantity('1');
       setNotes('');
@@ -144,6 +186,8 @@ export default function QuotesPage() {
         customerId: string;
         agentId?: string;
         agentCommissionPercentage?: number;
+        agentCategory?: AgentCategory;
+        discountPercentage?: number;
         notes?: string;
         items: {
           productId: string;
@@ -237,10 +281,16 @@ export default function QuotesPage() {
   };
 
   const handleCreateQuote = () => {
-    const parsedCommission = parseCommission(agentCommissionPercentage);
+    const parsedCommission = parsePercentage(agentCommissionPercentage);
+    const parsedDiscount = parsePercentage(discountPercentage);
 
     if (parsedCommission === null) {
       showToast('Agent commission must be between 0 and 100', 'error');
+      return;
+    }
+
+    if (parsedDiscount === null) {
+      showToast('Discount percentage must be between 0 and 100', 'error');
       return;
     }
 
@@ -253,6 +303,8 @@ export default function QuotesPage() {
       customerId,
       agentId: agentId || undefined,
       agentCommissionPercentage: parsedCommission,
+      agentCategory: agentCategory || undefined,
+      discountPercentage: parsedDiscount,
       items: items.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -271,6 +323,15 @@ export default function QuotesPage() {
     setEditAgentCommissionPercentage(
       selectedQuote.agentCommissionPercentage
         ? String(Number(selectedQuote.agentCommissionPercentage))
+        : '',
+    );
+    setEditAgentCategory(
+      (selectedQuote.metadata?.quoteDiscount?.agentCategory as AgentCategory | null) ??
+        '',
+    );
+    setEditDiscountPercentage(
+      selectedQuote.metadata?.quoteDiscount?.discountPercentage !== undefined
+        ? String(selectedQuote.metadata.quoteDiscount.discountPercentage)
         : '',
     );
     setEditNotes(selectedQuote.notes ?? '');
@@ -376,10 +437,16 @@ export default function QuotesPage() {
       return;
     }
 
-    const parsedCommission = parseCommission(editAgentCommissionPercentage);
+    const parsedCommission = parsePercentage(editAgentCommissionPercentage);
+    const parsedDiscount = parsePercentage(editDiscountPercentage);
 
     if (parsedCommission === null) {
       showToast('Agent commission must be between 0 and 100', 'error');
+      return;
+    }
+
+    if (parsedDiscount === null) {
+      showToast('Discount percentage must be between 0 and 100', 'error');
       return;
     }
 
@@ -394,6 +461,8 @@ export default function QuotesPage() {
         customerId: editCustomerId,
         agentId: editAgentId || undefined,
         agentCommissionPercentage: parsedCommission,
+        agentCategory: editAgentCategory || undefined,
+        discountPercentage: parsedDiscount,
         notes: editNotes,
         items: editItems.map((item) => ({
           productId: item.productId,
@@ -413,6 +482,15 @@ export default function QuotesPage() {
     setAgentCommissionPercentage(
       selectedQuote.agentCommissionPercentage
         ? String(Number(selectedQuote.agentCommissionPercentage))
+        : '',
+    );
+    setAgentCategory(
+      (selectedQuote.metadata?.quoteDiscount?.agentCategory as AgentCategory | null) ??
+        '',
+    );
+    setDiscountPercentage(
+      selectedQuote.metadata?.quoteDiscount?.discountPercentage !== undefined
+        ? String(selectedQuote.metadata.quoteDiscount.discountPercentage)
         : '',
     );
     setNotes(selectedQuote.notes ?? '');
@@ -473,12 +551,12 @@ export default function QuotesPage() {
     window.open(url, '_blank');
   };
 
-  const draftTotal = items.reduce(
+  const draftSubtotal = items.reduce(
     (total, item) => total + item.quantity * item.unitPrice,
     0,
   );
 
-  const parseCommission = (value: string) => {
+  const parsePercentage = (value: string) => {
     if (!value.trim()) {
       return undefined;
     }
@@ -491,6 +569,21 @@ export default function QuotesPage() {
 
     return parsed;
   };
+
+  const parsedDraftDiscount = parsePercentage(discountPercentage) ?? 0;
+  const parsedEditDiscount = parsePercentage(editDiscountPercentage) ?? 0;
+  const draftDiscountAmount = Number(
+    ((draftSubtotal * parsedDraftDiscount) / 100).toFixed(2),
+  );
+  const draftTotal = Number((draftSubtotal - draftDiscountAmount).toFixed(2));
+  const editSubtotal = editItems.reduce(
+    (total, item) => total + item.quantity * item.unitPrice,
+    0,
+  );
+  const editDiscountAmount = Number(
+    ((editSubtotal * parsedEditDiscount) / 100).toFixed(2),
+  );
+  const editTotal = Number((editSubtotal - editDiscountAmount).toFixed(2));
 
   const activeAgents = agents.filter((agent) => agent.active);
 
@@ -752,6 +845,55 @@ export default function QuotesPage() {
 
                   <TextField
                     select
+                    label="Agent Type"
+                    value={editAgentCategory}
+                    onChange={(e) => {
+                      const selectedCategory = e.target.value as AgentCategory | '';
+                      setEditAgentCategory(selectedCategory);
+
+                      if (!selectedCategory) {
+                        setEditDiscountPercentage('');
+                        return;
+                      }
+
+                      const defaultPercentage = defaultDiscountByCategory.get(
+                        selectedCategory,
+                      );
+
+                      setEditDiscountPercentage(
+                        defaultPercentage !== undefined
+                          ? String(defaultPercentage)
+                          : '',
+                      );
+                    }}
+                    fullWidth
+                  >
+                    <MenuItem value="">No Category</MenuItem>
+                    {agentCategoryOptions.map((category) => (
+                      <MenuItem key={category.category} value={category.category}>
+                        {category.label} ({category.defaultDiscountPercentage}% default)
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField
+                    label="Discount %"
+                    type="number"
+                    value={editDiscountPercentage}
+                    onChange={(e) => setEditDiscountPercentage(e.target.value)}
+                    helperText="Auto-filled from agent type. You can override it."
+                    slotProps={{
+                      htmlInput: {
+                        min: 0,
+                        max: 100,
+                        step: 0.01,
+                      },
+                    }}
+                    fullWidth
+                  />
+
+                  <TextField
+                    select
                     label="Product"
                     value={editProductId}
                     onChange={(e) => setEditProductId(e.target.value)}
@@ -824,6 +966,12 @@ export default function QuotesPage() {
                     </Stack>
                   ))}
 
+                  {editItems.length > 0 && (
+                    <Typography align="right">
+                      Draft Total: ₹{editTotal.toFixed(2)}
+                    </Typography>
+                  )}
+
                   <TextField
                     label="Notes"
                     value={editNotes}
@@ -858,6 +1006,17 @@ export default function QuotesPage() {
                   <Typography sx={{ mt: 1 }}>
                     Commission: {Number(selectedQuote.agentCommissionPercentage ?? 0).toFixed(2)}% (
                     ₹{Number(selectedQuote.agentCommissionAmount ?? 0).toFixed(2)})
+                  </Typography>
+                  <Typography sx={{ mt: 1 }}>
+                    Discount: {Number(
+                      selectedQuote.metadata?.quoteDiscount?.discountPercentage ?? 0,
+                    ).toFixed(2)}%
+                    {selectedQuote.metadata?.quoteDiscount?.agentCategory
+                      ? ` (${categoryLabelByValue.get(
+                          selectedQuote.metadata.quoteDiscount.agentCategory,
+                        ) ?? selectedQuote.metadata.quoteDiscount.agentCategory})`
+                      : ''}{' '}
+                    (₹{Number(selectedQuote.discountAmount ?? 0).toFixed(2)})
                   </Typography>
                   {selectedQuote.notes && (
                     <Typography sx={{ mt: 1 }}>Notes: {selectedQuote.notes}</Typography>
@@ -992,6 +1151,8 @@ export default function QuotesPage() {
           setCreateOpen(false);
           setAgentId('');
           setAgentCommissionPercentage('');
+          setAgentCategory('');
+          setDiscountPercentage('');
           setNotes('');
         }}
         fullWidth
@@ -1053,6 +1214,53 @@ export default function QuotesPage() {
               type="number"
               value={agentCommissionPercentage}
               onChange={(e) => setAgentCommissionPercentage(e.target.value)}
+              slotProps={{
+                htmlInput: {
+                  min: 0,
+                  max: 100,
+                  step: 0.01,
+                },
+              }}
+              fullWidth
+            />
+
+            <TextField
+              select
+              label="Agent Type"
+              value={agentCategory}
+              onChange={(e) => {
+                const selectedCategory = e.target.value as AgentCategory | '';
+                setAgentCategory(selectedCategory);
+
+                if (!selectedCategory) {
+                  setDiscountPercentage('');
+                  return;
+                }
+
+                const defaultPercentage = defaultDiscountByCategory.get(
+                  selectedCategory,
+                );
+
+                setDiscountPercentage(
+                  defaultPercentage !== undefined ? String(defaultPercentage) : '',
+                );
+              }}
+              fullWidth
+            >
+              <MenuItem value="">No Category</MenuItem>
+              {agentCategoryOptions.map((category) => (
+                <MenuItem key={category.category} value={category.category}>
+                  {category.label} ({category.defaultDiscountPercentage}% default)
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              label="Discount %"
+              type="number"
+              value={discountPercentage}
+              onChange={(e) => setDiscountPercentage(e.target.value)}
+              helperText="Auto-filled from agent type. You can override it."
               slotProps={{
                 htmlInput: {
                   min: 0,
@@ -1140,7 +1348,7 @@ export default function QuotesPage() {
                 ))}
 
                 <Typography sx={{ mt: 2 }} align="right">
-                  Draft Total: ₹{draftTotal}
+                  Draft Total: ₹{draftTotal.toFixed(2)}
                 </Typography>
               </Box>
             )}
@@ -1153,6 +1361,8 @@ export default function QuotesPage() {
               setCreateOpen(false);
               setAgentId('');
               setAgentCommissionPercentage('');
+              setAgentCategory('');
+              setDiscountPercentage('');
               setNotes('');
             }}
           >

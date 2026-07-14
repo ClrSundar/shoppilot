@@ -7,10 +7,12 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   Collapse,
   CircularProgress,
   Divider,
+  FormControlLabel,
   MenuItem,
   Stack,
   TextField,
@@ -100,6 +102,44 @@ function isDepthSensitiveAccessory(name: string): boolean {
   return normalized.includes('cable') || normalized.includes('pipe') || normalized.includes('rope');
 }
 
+type InstallationLengths = {
+  cableLengthM: string;
+  pipeLengthM: string;
+  ropeLengthM: string;
+};
+
+function getDefaultInstallationLengths(depth: number): InstallationLengths {
+  return {
+    cableLengthM: String(Math.max(1, Math.round(depth))),
+    pipeLengthM: String(Math.max(1, Math.round(depth))),
+    ropeLengthM: String(Math.max(1, Math.round(depth) + 10)),
+  };
+}
+
+function getLengthForAccessory(
+  itemName: string,
+  lengths: InstallationLengths,
+): number | null {
+  const normalized = itemName.toLowerCase();
+
+  if (normalized.includes('cable')) {
+    const length = Number(lengths.cableLengthM);
+    return Number.isFinite(length) && length > 0 ? length : null;
+  }
+
+  if (normalized.includes('pipe')) {
+    const length = Number(lengths.pipeLengthM);
+    return Number.isFinite(length) && length > 0 ? length : null;
+  }
+
+  if (normalized.includes('rope')) {
+    const length = Number(lengths.ropeLengthM);
+    return Number.isFinite(length) && length > 0 ? length : null;
+  }
+
+  return null;
+}
+
 export default function CopilotPage() {
   const { toast, showToast, closeToast } = useAppToast();
 
@@ -116,6 +156,31 @@ export default function CopilotPage() {
   const [showDraftByMessage, setShowDraftByMessage] = useState<Record<string, boolean>>({});
   const [showRecommendationDetailsByMessage, setShowRecommendationDetailsByMessage] = useState<
     Record<string, boolean>
+  >({});
+  const [installationLengthsByMessage, setInstallationLengthsByMessage] = useState<
+    Record<string, InstallationLengths>
+  >({});
+  const [showFeedbackByMessage, setShowFeedbackByMessage] = useState<Record<string, boolean>>({});
+  const [feedbackDraftByMessage, setFeedbackDraftByMessage] = useState<
+    Record<
+      string,
+      {
+        action?: 'ACCEPTED' | 'CHANGED_PRODUCT' | 'REJECTED';
+        selectedAlternativeProductId?: string;
+        reason?:
+          | 'PRICE'
+          | 'STOCK'
+          | 'CUSTOMER_PREFERENCE'
+          | 'BRAND_PREFERENCE'
+          | 'OTHER';
+      }
+    >
+  >({});
+  const [feedbackSubmittedByMessage, setFeedbackSubmittedByMessage] = useState<
+    Record<string, boolean>
+  >({});
+  const [selectedAlternativeByMessage, setSelectedAlternativeByMessage] = useState<
+    Record<string, string>
   >({});
 
   const { data: customers = [] } = useQuery({
@@ -159,10 +224,14 @@ export default function CopilotPage() {
 
           const restoredDrafts: Record<string, DraftQuotePreview> = {};
           const restoredCustomers: Record<string, string> = {};
+          const restoredInstallationLengths: Record<string, InstallationLengths> = {};
 
           restoredMessages.forEach((message) => {
             if (message.draftQuote) {
               restoredDrafts[message.id] = normalizeDraftQuote(message.draftQuote);
+              restoredInstallationLengths[message.id] = getDefaultInstallationLengths(
+                message.draftQuote.depth,
+              );
 
               if (message.draftQuote.suggestedCustomerId) {
                 restoredCustomers[message.id] =
@@ -177,6 +246,10 @@ export default function CopilotPage() {
 
           if (Object.keys(restoredCustomers).length > 0) {
             setSelectedCustomerByMessage(restoredCustomers);
+          }
+
+          if (Object.keys(restoredInstallationLengths).length > 0) {
+            setInstallationLengthsByMessage(restoredInstallationLengths);
           }
         }
       } catch {
@@ -255,6 +328,11 @@ export default function CopilotPage() {
           ...prev,
           [assistantId]: data.draftQuote?.suggestedCustomerId ?? '',
         }));
+
+        setInstallationLengthsByMessage((prev) => ({
+          ...prev,
+          [assistantId]: getDefaultInstallationLengths(data.draftQuote?.depth ?? 300),
+        }));
       }
 
       setInput('');
@@ -297,6 +375,12 @@ export default function CopilotPage() {
       const current = prev[messageId];
 
       if (!current) {
+        return prev;
+      }
+
+      const item = current.items[index];
+
+      if (!item || item.requirementType === 'REQUIRED') {
         return prev;
       }
 
@@ -365,6 +449,10 @@ export default function CopilotPage() {
       const current = prev[messageId];
 
       if (!current) {
+        return prev;
+      }
+
+      if (current.items[index]?.requirementType === 'REQUIRED') {
         return prev;
       }
 
@@ -469,6 +557,129 @@ export default function CopilotPage() {
     }));
   };
 
+  const handleOptionalAccessoryToggle = (
+    messageId: string,
+    optionalItem: { productId: string; name: string; unitPrice: number },
+    checked: boolean,
+  ) => {
+    setDraftEdits((prev) => {
+      const current = prev[messageId];
+
+      if (!current) {
+        return prev;
+      }
+
+      const exists = current.items.some(
+        (item) => item.productId === optionalItem.productId,
+      );
+
+      if (checked && !exists) {
+        const nextItems = [
+          ...current.items,
+          {
+            productId: optionalItem.productId,
+            name: optionalItem.name,
+            quantity: 1,
+            unitPrice: optionalItem.unitPrice,
+            lineTotal: Number(optionalItem.unitPrice.toFixed(2)),
+            kind: 'ACCESSORY' as const,
+            requirementType: 'OPTIONAL' as const,
+          },
+        ];
+
+        return {
+          ...prev,
+          [messageId]: normalizeDraftQuote({
+            ...current,
+            items: nextItems,
+          }),
+        };
+      }
+
+      if (!checked && exists) {
+        const nextItems = current.items.filter(
+          (item) => item.productId !== optionalItem.productId,
+        );
+
+        return {
+          ...prev,
+          [messageId]: normalizeDraftQuote({
+            ...current,
+            items: nextItems,
+          }),
+        };
+      }
+
+      return prev;
+    });
+  };
+
+  const applyInstallationLengthsToDraft = (
+    messageId: string,
+    lengths: InstallationLengths,
+  ) => {
+    setDraftEdits((prev) => {
+      const current = prev[messageId];
+
+      if (!current) {
+        return prev;
+      }
+
+      const nextItems = current.items.map((item) => {
+        if (item.kind !== 'ACCESSORY' || !isDepthSensitiveAccessory(item.name)) {
+          return item;
+        }
+
+        const length = getLengthForAccessory(item.name, lengths);
+
+        if (length === null) {
+          return item;
+        }
+
+        return {
+          ...item,
+          quantity: length,
+          lineTotal: Number((length * item.unitPrice).toFixed(2)),
+        };
+      });
+
+      return {
+        ...prev,
+        [messageId]: normalizeDraftQuote({
+          ...current,
+          items: nextItems,
+        }),
+      };
+    });
+  };
+
+  const handleInstallationLengthChange = (
+    messageId: string,
+    field: keyof InstallationLengths,
+    value: string,
+  ) => {
+    setInstallationLengthsByMessage((prev) => {
+      const current =
+        prev[messageId] ??
+        getDefaultInstallationLengths(
+          (draftEdits[messageId] ?? messages.find((m) => m.id === messageId)?.draftQuote)?.depth ??
+            300,
+        );
+
+      const next = {
+        ...current,
+        [field]: value,
+      };
+
+      applyInstallationLengthsToDraft(messageId, next);
+
+      return {
+        ...prev,
+        [messageId]: next,
+      };
+    });
+  };
+
   const confirmDraftMutation = useMutation({
     mutationFn: (message: ChatMessage) => {
       const selectedCustomerId = selectedCustomerByMessage[message.id] ?? '';
@@ -497,6 +708,10 @@ export default function CopilotPage() {
         throw new Error('Confirmation token missing. Please regenerate the draft.');
       }
 
+      const installationLengths =
+        installationLengthsByMessage[message.id] ??
+        getDefaultInstallationLengths(effectiveDraft.depth);
+
       return copilotService.confirmDraft({
         sessionId,
         confirmationToken,
@@ -506,9 +721,15 @@ export default function CopilotPage() {
         accessories,
         depth: effectiveDraft.depth,
         recommendedHp: effectiveDraft.recommendedHp,
+        recommendationRunId:
+          effectiveDraft.recommendationRunId ??
+          message.recommendation?.recommendationRunId,
+        cableLengthM: Number(installationLengths.cableLengthM) || undefined,
+        pipeLengthM: Number(installationLengths.pipeLengthM) || undefined,
+        ropeLengthM: Number(installationLengths.ropeLengthM) || undefined,
       });
     },
-    onSuccess: (data) => {
+    onSuccess: (data, message) => {
       setMessages((prev) => [
         ...prev,
         {
@@ -519,6 +740,14 @@ export default function CopilotPage() {
             : `Quote created successfully: ${data.quoteNumber} (Rs ${data.totalAmount.toFixed(2)}) for ${data.customer.name}.`,
         },
       ]);
+
+      if (message.recommendation?.recommendationRunId) {
+        setShowFeedbackByMessage((prev) => ({
+          ...prev,
+          [message.id]: true,
+        }));
+      }
+
       showToast(
         data.idempotentReplay
           ? 'Already confirmed earlier. Reused existing quote.'
@@ -532,6 +761,37 @@ export default function CopilotPage() {
           ? error.message
           : 'Failed to confirm draft quote. Please try again.';
       showToast(message, 'error');
+    },
+  });
+
+  const feedbackMutation = useMutation({
+    mutationFn: (payload: {
+      messageId: string;
+      runId: string;
+      action: 'ACCEPTED' | 'CHANGED_PRODUCT' | 'REJECTED';
+      selectedAlternativeProductId?: string;
+      reason?:
+        | 'PRICE'
+        | 'STOCK'
+        | 'CUSTOMER_PREFERENCE'
+        | 'BRAND_PREFERENCE'
+        | 'OTHER';
+    }) =>
+      copilotService.submitRecommendationFeedback({
+        runId: payload.runId,
+        action: payload.action,
+        selectedAlternativeProductId: payload.selectedAlternativeProductId,
+        reason: payload.reason,
+      }),
+    onSuccess: (_data, variables) => {
+      setFeedbackSubmittedByMessage((prev) => ({
+        ...prev,
+        [variables.messageId]: true,
+      }));
+      showToast('Recommendation feedback recorded', 'success');
+    },
+    onError: () => {
+      showToast('Failed to save recommendation feedback', 'error');
     },
   });
 
@@ -554,6 +814,95 @@ export default function CopilotPage() {
       ...prev,
       [messageId]: !prev[messageId],
     }));
+  };
+
+  const selectFeedbackAction = (
+    messageId: string,
+    action: 'ACCEPTED' | 'CHANGED_PRODUCT' | 'REJECTED',
+  ) => {
+    setFeedbackDraftByMessage((prev) => ({
+      ...prev,
+      [messageId]: {
+        ...prev[messageId],
+        action,
+      },
+    }));
+  };
+
+  const updateFeedbackDraft = (
+    messageId: string,
+    key: 'selectedAlternativeProductId' | 'reason',
+    value: string,
+  ) => {
+    setFeedbackDraftByMessage((prev) => ({
+      ...prev,
+      [messageId]: {
+        ...prev[messageId],
+        [key]: value,
+      },
+    }));
+  };
+
+  const submitFeedback = (message: ChatMessage) => {
+    if (!message.recommendation?.recommendationRunId) {
+      showToast('Recommendation run not found for feedback', 'error');
+      return;
+    }
+
+    const draft = feedbackDraftByMessage[message.id];
+
+    if (!draft?.action) {
+      showToast('Choose a feedback action first', 'error');
+      return;
+    }
+
+    if (draft.action === 'CHANGED_PRODUCT' && !draft.selectedAlternativeProductId) {
+      showToast('Select an alternative product for changed-product feedback', 'error');
+      return;
+    }
+
+    feedbackMutation.mutate({
+      messageId: message.id,
+      runId: message.recommendation.recommendationRunId,
+      action: draft.action,
+      selectedAlternativeProductId: draft.selectedAlternativeProductId,
+      reason: draft.reason,
+    });
+  };
+
+  const buildWhyNotExplanation = (message: ChatMessage, alternativeProductId: string) => {
+    const recommendation = message.recommendation;
+
+    if (!recommendation) {
+      return null;
+    }
+
+    const topCandidate = recommendation.candidates.find((candidate) => candidate.rank === 1);
+    const alternativeCandidate = recommendation.candidates.find(
+      (candidate) => candidate.productId === alternativeProductId,
+    );
+
+    if (!topCandidate || !alternativeCandidate) {
+      return null;
+    }
+
+    const reasons: string[] = [];
+
+    if (alternativeCandidate.stockQty < topCandidate.stockQty) {
+      reasons.push(`lower stock (${alternativeCandidate.stockQty}) than ${topCandidate.productName} (${topCandidate.stockQty})`);
+    }
+
+    if (alternativeCandidate.sellingPrice > topCandidate.sellingPrice) {
+      reasons.push(
+        `higher selling price (${formatCurrency(alternativeCandidate.sellingPrice)}) than ${topCandidate.productName} (${formatCurrency(topCandidate.sellingPrice)})`,
+      );
+    }
+
+    if (reasons.length === 0) {
+      reasons.push('slightly lower composite score in this rule setup');
+    }
+
+    return `${alternativeCandidate.productName} is suitable, but ranked lower because ${reasons.join(' and ')}.`;
   };
 
   return (
@@ -771,6 +1120,46 @@ export default function CopilotPage() {
                                     </Typography>
                                   ))}
                                 </Stack>
+
+                                <Stack
+                                  direction={{ xs: 'column', md: 'row' }}
+                                  spacing={0.75}
+                                  sx={{ mt: 0.8, alignItems: { xs: 'stretch', md: 'center' } }}
+                                >
+                                  <TextField
+                                    select
+                                    size="small"
+                                    label="Why not this?"
+                                    value={selectedAlternativeByMessage[message.id] ?? ''}
+                                    onChange={(event) =>
+                                      setSelectedAlternativeByMessage((prev) => ({
+                                        ...prev,
+                                        [message.id]: event.target.value,
+                                      }))
+                                    }
+                                    sx={{ minWidth: 260, bgcolor: 'white' }}
+                                  >
+                                    {message.recommendation.candidates
+                                      .filter((candidate) => candidate.rank !== 1)
+                                      .map((candidate) => (
+                                        <MenuItem
+                                          key={`${message.id}-why-not-${candidate.productId}`}
+                                          value={candidate.productId}
+                                        >
+                                          {candidate.productName}
+                                        </MenuItem>
+                                      ))}
+                                  </TextField>
+                                </Stack>
+
+                                {selectedAlternativeByMessage[message.id] ? (
+                                  <Alert severity="info" sx={{ mt: 0.8, borderRadius: 2 }}>
+                                    {buildWhyNotExplanation(
+                                      message,
+                                      selectedAlternativeByMessage[message.id],
+                                    )}
+                                  </Alert>
+                                ) : null}
                               </Box>
                             ) : null}
 
@@ -847,6 +1236,9 @@ export default function CopilotPage() {
                             productId: '',
                             quantity: '1',
                           };
+                          const installationLengths =
+                            installationLengthsByMessage[message.id] ??
+                            getDefaultInstallationLengths(effectiveDraft.depth);
 
                           return (
                             <>
@@ -865,6 +1257,68 @@ export default function CopilotPage() {
                                 Estimated Total: Rs {effectiveDraft.estimatedTotal.toFixed(2)}
                               </Typography>
 
+                              <Box
+                                sx={{
+                                  mt: 1,
+                                  p: 1,
+                                  borderRadius: 1.5,
+                                  border: '1px solid',
+                                  borderColor: 'divider',
+                                  bgcolor: 'white',
+                                }}
+                              >
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.75 }}>
+                                  Installation quantity confirmation
+                                </Typography>
+                                <Typography variant="caption" sx={{ display: 'block', mb: 0.75 }}>
+                                  Bore depth: {effectiveDraft.depth} ft
+                                </Typography>
+                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={0.8}>
+                                  <TextField
+                                    size="small"
+                                    label="Cable length (m)"
+                                    type="number"
+                                    value={installationLengths.cableLengthM}
+                                    onChange={(event) =>
+                                      handleInstallationLengthChange(
+                                        message.id,
+                                        'cableLengthM',
+                                        event.target.value,
+                                      )
+                                    }
+                                    sx={{ width: 160, bgcolor: 'white' }}
+                                  />
+                                  <TextField
+                                    size="small"
+                                    label="Pipe length (m)"
+                                    type="number"
+                                    value={installationLengths.pipeLengthM}
+                                    onChange={(event) =>
+                                      handleInstallationLengthChange(
+                                        message.id,
+                                        'pipeLengthM',
+                                        event.target.value,
+                                      )
+                                    }
+                                    sx={{ width: 160, bgcolor: 'white' }}
+                                  />
+                                  <TextField
+                                    size="small"
+                                    label="Rope length (m)"
+                                    type="number"
+                                    value={installationLengths.ropeLengthM}
+                                    onChange={(event) =>
+                                      handleInstallationLengthChange(
+                                        message.id,
+                                        'ropeLengthM',
+                                        event.target.value,
+                                      )
+                                    }
+                                    sx={{ width: 160, bgcolor: 'white' }}
+                                  />
+                                </Stack>
+                              </Box>
+
                               <Stack spacing={0.8} sx={{ mt: 0.8 }}>
                                 {effectiveDraft.items.map((item, index) => (
                                   <Stack
@@ -876,6 +1330,7 @@ export default function CopilotPage() {
                                       select
                                       size="small"
                                       value={item.productId}
+                                      disabled={item.requirementType === 'REQUIRED'}
                                       onChange={(event) =>
                                         handleDraftReplaceProduct(
                                           message.id,
@@ -924,6 +1379,7 @@ export default function CopilotPage() {
                                       size="small"
                                       color="error"
                                       variant="outlined"
+                                      disabled={item.requirementType === 'REQUIRED'}
                                       onClick={() => handleDraftRemoveItem(message.id, index)}
                                     >
                                       Remove
@@ -941,6 +1397,49 @@ export default function CopilotPage() {
                                   </Stack>
                                 ))}
                               </Stack>
+
+                              {effectiveDraft.optionalItems && effectiveDraft.optionalItems.length > 0 ? (
+                                <Box
+                                  sx={{
+                                    mt: 1,
+                                    p: 1,
+                                    borderRadius: 1.5,
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    bgcolor: 'white',
+                                  }}
+                                >
+                                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                                    Optional accessories (unchecked by default)
+                                  </Typography>
+                                  <Stack>
+                                    {effectiveDraft.optionalItems.map((optionalItem) => {
+                                      const isChecked = effectiveDraft.items.some(
+                                        (item) => item.productId === optionalItem.productId,
+                                      );
+
+                                      return (
+                                        <FormControlLabel
+                                          key={`${message.id}-optional-${optionalItem.productId}`}
+                                          control={
+                                            <Checkbox
+                                              checked={isChecked}
+                                              onChange={(event) =>
+                                                handleOptionalAccessoryToggle(
+                                                  message.id,
+                                                  optionalItem,
+                                                  event.target.checked,
+                                                )
+                                              }
+                                            />
+                                          }
+                                          label={`${optionalItem.name} (${formatCurrency(optionalItem.unitPrice)})`}
+                                        />
+                                      );
+                                    })}
+                                  </Stack>
+                                </Box>
+                              ) : null}
 
                               <Stack
                                 direction={{ xs: 'column', md: 'row' }}
@@ -1002,40 +1501,176 @@ export default function CopilotPage() {
                         })()}
 
                         {message.proposedAction?.type === 'DRAFT_QUOTE' ? (
-                          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mt: 1 }}>
-                            <TextField
-                              select
-                              size="small"
-                              value={selectedCustomerByMessage[message.id] ?? ''}
-                              onChange={(event) =>
-                                handleDraftCustomerChange(
-                                  message.id,
-                                  event.target.value,
-                                )
-                              }
-                              sx={{ minWidth: 240, bgcolor: 'white' }}
-                              label="Select Customer"
-                            >
-                              {customers.map((customer) => (
-                                <MenuItem key={customer.id} value={customer.id}>
-                                  {customer.name}
-                                </MenuItem>
-                              ))}
-                            </TextField>
-                            <Button
-                              size="small"
-                              variant="contained"
-                              disabled={
-                                confirmDraftMutation.isPending ||
-                                !sessionId ||
-                                !message.confirmationToken
-                              }
-                              onClick={() => confirmDraftMutation.mutate(message)}
-                            >
-                              {confirmDraftMutation.isPending
-                                ? 'Creating...'
-                                : 'Confirm and Create Quote'}
-                            </Button>
+                          <Stack spacing={1} sx={{ mt: 1 }}>
+                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
+                              <TextField
+                                select
+                                size="small"
+                                value={selectedCustomerByMessage[message.id] ?? ''}
+                                onChange={(event) =>
+                                  handleDraftCustomerChange(
+                                    message.id,
+                                    event.target.value,
+                                  )
+                                }
+                                sx={{ minWidth: 240, bgcolor: 'white' }}
+                                label="Select Customer"
+                              >
+                                {customers.map((customer) => (
+                                  <MenuItem key={customer.id} value={customer.id}>
+                                    {customer.name}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                disabled={
+                                  confirmDraftMutation.isPending ||
+                                  !sessionId ||
+                                  !message.confirmationToken
+                                }
+                                onClick={() => confirmDraftMutation.mutate(message)}
+                              >
+                                {confirmDraftMutation.isPending
+                                  ? 'Creating...'
+                                  : 'Confirm and Create Quote'}
+                              </Button>
+                            </Stack>
+
+                            {showFeedbackByMessage[message.id] ? (
+                              <Box
+                                sx={{
+                                  p: 1,
+                                  borderRadius: 1.5,
+                                  border: '1px solid',
+                                  borderColor: 'divider',
+                                  bgcolor: 'white',
+                                }}
+                              >
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.75 }}>
+                                  Was this recommendation useful?
+                                </Typography>
+                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={0.75}>
+                                  <Button
+                                    size="small"
+                                    variant={
+                                      feedbackDraftByMessage[message.id]?.action === 'ACCEPTED'
+                                        ? 'contained'
+                                        : 'outlined'
+                                    }
+                                    onClick={() => selectFeedbackAction(message.id, 'ACCEPTED')}
+                                  >
+                                    Accepted
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant={
+                                      feedbackDraftByMessage[message.id]?.action ===
+                                      'CHANGED_PRODUCT'
+                                        ? 'contained'
+                                        : 'outlined'
+                                    }
+                                    onClick={() =>
+                                      selectFeedbackAction(message.id, 'CHANGED_PRODUCT')
+                                    }
+                                  >
+                                    Changed Product
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant={
+                                      feedbackDraftByMessage[message.id]?.action === 'REJECTED'
+                                        ? 'contained'
+                                        : 'outlined'
+                                    }
+                                    onClick={() => selectFeedbackAction(message.id, 'REJECTED')}
+                                  >
+                                    Rejected
+                                  </Button>
+                                </Stack>
+
+                                {feedbackDraftByMessage[message.id]?.action ===
+                                'CHANGED_PRODUCT' ? (
+                                  <Stack
+                                    direction={{ xs: 'column', md: 'row' }}
+                                    spacing={0.75}
+                                    sx={{ mt: 0.8 }}
+                                  >
+                                    <TextField
+                                      select
+                                      size="small"
+                                      label="Selected alternative"
+                                      value={
+                                        feedbackDraftByMessage[message.id]
+                                          ?.selectedAlternativeProductId ?? ''
+                                      }
+                                      onChange={(event) =>
+                                        updateFeedbackDraft(
+                                          message.id,
+                                          'selectedAlternativeProductId',
+                                          event.target.value,
+                                        )
+                                      }
+                                      sx={{ minWidth: 240 }}
+                                    >
+                                      {message.recommendation?.candidates
+                                        .filter((candidate) => candidate.rank !== 1)
+                                        .map((candidate) => (
+                                          <MenuItem
+                                            key={`${message.id}-alt-${candidate.productId}`}
+                                            value={candidate.productId}
+                                          >
+                                            {candidate.productName}
+                                          </MenuItem>
+                                        ))}
+                                    </TextField>
+                                  </Stack>
+                                ) : null}
+
+                                <Stack
+                                  direction={{ xs: 'column', md: 'row' }}
+                                  spacing={0.75}
+                                  sx={{ mt: 0.8 }}
+                                >
+                                  <TextField
+                                    select
+                                    size="small"
+                                    label="Reason"
+                                    value={feedbackDraftByMessage[message.id]?.reason ?? ''}
+                                    onChange={(event) =>
+                                      updateFeedbackDraft(message.id, 'reason', event.target.value)
+                                    }
+                                    sx={{ minWidth: 220 }}
+                                  >
+                                    <MenuItem value="PRICE">Price</MenuItem>
+                                    <MenuItem value="STOCK">Stock</MenuItem>
+                                    <MenuItem value="CUSTOMER_PREFERENCE">
+                                      Customer preference
+                                    </MenuItem>
+                                    <MenuItem value="BRAND_PREFERENCE">
+                                      Brand preference
+                                    </MenuItem>
+                                    <MenuItem value="OTHER">Other</MenuItem>
+                                  </TextField>
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    disabled={
+                                      feedbackMutation.isPending ||
+                                      feedbackSubmittedByMessage[message.id] === true
+                                    }
+                                    onClick={() => submitFeedback(message)}
+                                  >
+                                    {feedbackSubmittedByMessage[message.id]
+                                      ? 'Feedback saved'
+                                      : feedbackMutation.isPending
+                                        ? 'Saving...'
+                                        : 'Save feedback'}
+                                  </Button>
+                                </Stack>
+                              </Box>
+                            ) : null}
                           </Stack>
                         ) : null}
                       </Box>

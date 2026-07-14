@@ -1,0 +1,38 @@
+{
+  "runId": "a8e45b2a-6b05-4ea9-a887-b5cf70a56878",
+  "alternativeProduct": {
+    "id": "9a8ea1a8-a513-4448-bbe1-bc1eb265c421",
+    "name": "CRI 3HP Single Phase Submersible Motor"
+  },
+  "feedback": {
+    "runId": "a8e45b2a-6b05-4ea9-a887-b5cf70a56878",
+    "feedbackId": "5870d467-1979-44eb-8f46-58a9aab9d740",
+    "action": "PARTIALLY_ACCEPTED",
+    "acceptedProductIds": [
+      "9a8ea1a8-a513-4448-bbe1-bc1eb265c421"
+    ],
+    "rejectedProductIds": [
+      "ddb8e601-3402-44f1-b540-e36563629639"
+    ],
+    "notes": "Reason: BRAND_PREFERENCE",
+    "createdAt": "2026-07-06T09:21:56.357Z"
+  },
+  "historyTop": {
+    "runId": "a8e45b2a-6b05-4ea9-a887-b5cf70a56878",
+    "date": "2026-07-06T09:21:56.317Z",
+    "customer": null,
+    "boreDepthFt": 330,
+    "recommendedMotor": {
+      "productId": "ddb8e601-3402-44f1-b540-e36563629639",
+      "productName": "Texmo 3HP Single Phase Submersible Motor"
+    },
+    "appliedRuleCode": "BORE_WELL_300_360_SINGLE",
+    "quoteCreated": false,
+    "quote": null,
+    "feedback": {
+      "action": "PARTIALLY_ACCEPTED",
+      "notes": "Reason: BRAND_PREFERENCE",
+      "createdAt": "2026-07-06T09:21:56.357Z"
+    }
+  }
+}

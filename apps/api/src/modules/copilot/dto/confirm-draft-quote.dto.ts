@@ -60,5 +60,27 @@ export class ConfirmDraftQuoteDto {
 
   @IsOptional()
   @IsString()
+  recommendationRunId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  cableLengthM?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  pipeLengthM?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  ropeLengthM?: number;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
 }

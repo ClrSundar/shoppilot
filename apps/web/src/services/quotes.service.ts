@@ -1,4 +1,5 @@
 import { api } from '@/lib/api';
+import type { AgentCategory } from './tenant-settings.service';
 
 export type Quote = {
   id: string;
@@ -7,11 +8,18 @@ export type Quote = {
   subtotal: string;
   taxAmount: string;
   totalAmount: string;
+  discountAmount?: string;
   createdAt: string;
   notes?: string | null;
   agentId?: string | null;
   agentCommissionPercentage?: string;
   agentCommissionAmount?: string;
+  metadata?: {
+    quoteDiscount?: {
+      agentCategory?: AgentCategory | null;
+      discountPercentage?: number;
+    };
+  } | null;
   customer: {
     id: string;
     name: string;
@@ -98,6 +106,8 @@ export type CreateQuotePayload = {
   customerId: string;
   agentId?: string;
   agentCommissionPercentage?: number;
+  agentCategory?: AgentCategory;
+  discountPercentage?: number;
   items: {
     productId: string;
     quantity: number;
@@ -106,6 +116,8 @@ export type CreateQuotePayload = {
 };
 
 export type UpdateQuotePayload = CreateQuotePayload;
+
+export type { AgentCategory } from './tenant-settings.service';
 
 
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +7,7 @@ import type { JwtPayload } from '../../common/types/jwt-payload.type';
 
 import { DecisionService } from './decisions.service';
 import { RecommendSolutionDto } from './dto/recommend-solution.dto';
+import { RecommendationFeedbackDto } from './dto/recommendation-feedback.dto';
 
 @ApiTags('Decisions')
 @ApiBearerAuth('JWT-auth')
@@ -27,5 +28,38 @@ export class DecisionController {
     @Body() dto: RecommendSolutionDto,
   ) {
     return this.decisionService.recommendSolution(user.tenantId, user.sub, dto);
+  }
+
+  @Post('feedback')
+  @ApiOperation({
+    summary: 'Record recommendation feedback',
+    description:
+      'Stores operator feedback for a recommendation run (accepted/changed/rejected) for audit and pilot learning.',
+  })
+  recordFeedback(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: RecommendationFeedbackDto,
+  ) {
+    return this.decisionService.recordRecommendationFeedback(
+      user.tenantId,
+      user.sub,
+      dto,
+    );
+  }
+
+  @Get('history')
+  @ApiOperation({
+    summary: 'List recent recommendation runs',
+    description:
+      'Returns recent recommendation runs with customer context, top recommendation, quote linkage, and feedback.',
+  })
+  getRecommendationHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query('limit') limit?: string,
+  ) {
+    return this.decisionService.getRecommendationHistory(
+      user.tenantId,
+      limit ? Number(limit) : 20,
+    );
   }
 }

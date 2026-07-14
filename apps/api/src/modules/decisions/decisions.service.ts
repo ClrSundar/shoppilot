@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   DecisionRuleStatus,
+  RecommendationAction,
   RecommendationRunStatus,
   RequirementType,
   Prisma,
@@ -8,6 +9,10 @@ import {
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RecommendSolutionDto } from './dto/recommend-solution.dto';
+import {
+  RecommendationFeedbackAction,
+  RecommendationFeedbackDto,
+} from './dto/recommendation-feedback.dto';
 import type {
   RecommendSolutionResponse,
   CandidateResult,
@@ -92,6 +97,217 @@ export class DecisionService {
         errorMessage: message,
       };
     }
+  }
+
+  async recordRecommendationFeedback(
+    tenantId: string,
+    userId: string,
+    dto: RecommendationFeedbackDto,
+  ) {
+    const run = await this.prisma.recommendationRun.findFirst({
+      where: {
+        id: dto.runId,
+        tenantId,
+      },
+      include: {
+        candidates: {
+          orderBy: {
+            rank: 'asc',
+          },
+          select: {
+            productId: true,
+          },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new BadRequestException('Recommendation run not found');
+    }
+
+    const topProductId = run.candidates[0]?.productId ?? null;
+    const validCandidateIds = new Set(run.candidates.map((candidate) => candidate.productId));
+
+    if (
+      dto.action === RecommendationFeedbackAction.CHANGED_PRODUCT &&
+      !dto.selectedAlternativeProductId
+    ) {
+      throw new BadRequestException(
+        'selectedAlternativeProductId is required when action is CHANGED_PRODUCT',
+      );
+    }
+
+    if (
+      dto.selectedAlternativeProductId &&
+      !validCandidateIds.has(dto.selectedAlternativeProductId)
+    ) {
+      throw new BadRequestException(
+        'selectedAlternativeProductId must be one of the ranked recommendation candidates',
+      );
+    }
+
+    let action: RecommendationAction;
+    let acceptedProductIds: string[] = [];
+    let rejectedProductIds: string[] = [];
+
+    if (dto.action === RecommendationFeedbackAction.ACCEPTED) {
+      action = RecommendationAction.ACCEPTED;
+      acceptedProductIds = topProductId ? [topProductId] : [];
+    } else if (dto.action === RecommendationFeedbackAction.CHANGED_PRODUCT) {
+      action = RecommendationAction.PARTIALLY_ACCEPTED;
+      acceptedProductIds = dto.selectedAlternativeProductId
+        ? [dto.selectedAlternativeProductId]
+        : [];
+      rejectedProductIds =
+        topProductId && topProductId !== dto.selectedAlternativeProductId
+          ? [topProductId]
+          : [];
+    } else {
+      action = RecommendationAction.REJECTED;
+      rejectedProductIds = topProductId ? [topProductId] : [];
+    }
+
+    const noteParts = [
+      dto.reason ? `Reason: ${dto.reason}` : null,
+      dto.notes?.trim() ? dto.notes.trim() : null,
+    ].filter(Boolean);
+
+    const feedback = await this.prisma.recommendationFeedback.upsert({
+      where: {
+        runId: dto.runId,
+      },
+      update: {
+        action,
+        acceptedProductIds,
+        rejectedProductIds,
+        notes: noteParts.length > 0 ? noteParts.join(' | ') : null,
+        userId,
+      },
+      create: {
+        runId: dto.runId,
+        action,
+        acceptedProductIds,
+        rejectedProductIds,
+        notes: noteParts.length > 0 ? noteParts.join(' | ') : null,
+        userId,
+      },
+    });
+
+    return {
+      runId: dto.runId,
+      feedbackId: feedback.id,
+      action: feedback.action,
+      acceptedProductIds: feedback.acceptedProductIds,
+      rejectedProductIds: feedback.rejectedProductIds,
+      notes: feedback.notes,
+      createdAt: feedback.createdAt,
+    };
+  }
+
+  async getRecommendationHistory(tenantId: string, requestedLimit = 20) {
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(100, Math.trunc(requestedLimit)))
+      : 20;
+
+    const runs = await this.prisma.recommendationRun.findMany({
+      where: {
+        tenantId,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: limit,
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        decisionRule: {
+          select: {
+            code: true,
+          },
+        },
+        candidates: {
+          where: {
+            rank: 1,
+          },
+          take: 1,
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        feedback: {
+          select: {
+            action: true,
+            notes: true,
+            createdAt: true,
+          },
+        },
+        quotes: {
+          select: {
+            id: true,
+            quoteNumber: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: 1,
+        },
+      },
+    });
+
+    return runs.map((run) => {
+      const queryInputs = (run.queryInputs ?? {}) as Record<string, unknown>;
+      const topCandidate = run.candidates[0];
+      const latestQuote = run.quotes[0] ?? null;
+
+      return {
+        runId: run.id,
+        date: run.createdAt,
+        customer: run.customer
+          ? {
+              id: run.customer.id,
+              name: run.customer.name,
+            }
+          : null,
+        boreDepthFt:
+          typeof queryInputs.boreDepthFt === 'number'
+            ? queryInputs.boreDepthFt
+            : typeof queryInputs.depth === 'number'
+              ? queryInputs.depth
+              : null,
+        recommendedMotor: topCandidate
+          ? {
+              productId: topCandidate.product.id,
+              productName: topCandidate.product.name,
+            }
+          : null,
+        appliedRuleCode: run.decisionRule?.code ?? null,
+        quoteCreated: Boolean(latestQuote),
+        quote: latestQuote
+          ? {
+              id: latestQuote.id,
+              quoteNumber: latestQuote.quoteNumber,
+              createdAt: latestQuote.createdAt,
+            }
+          : null,
+        feedback: run.feedback
+          ? {
+              action: run.feedback.action,
+              notes: run.feedback.notes,
+              createdAt: run.feedback.createdAt,
+            }
+          : null,
+      };
+    });
   }
 
   // =========================================================================

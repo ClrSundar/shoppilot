@@ -30,6 +30,8 @@ type CopilotChatResponse = {
 type DraftQuotePreview = {
   depth: number;
   recommendedHp: string;
+  recommendationRunId?: string;
+  appliedRuleCode?: string;
   suggestedCustomerId?: string;
   suggestedCustomerName?: string;
   itemCount: number;
@@ -43,7 +45,25 @@ type DraftQuotePreview = {
     unitPrice: number;
     lineTotal: number;
     kind: 'MOTOR' | 'ACCESSORY';
+    requirementType?: 'REQUIRED' | 'RECOMMENDED' | 'OPTIONAL';
   }>;
+  optionalItems?: Array<{
+    productId: string;
+    name: string;
+    unitPrice: number;
+  }>;
+};
+
+type DraftConfirmationPayload = {
+  recommendationRunId?: string;
+  appliedRuleCode?: string;
+  depth?: number;
+  phase?: 'SINGLE' | 'THREE';
+  budget?: number | null;
+  primaryProductId?: string;
+  requiredAccessoryProductIds?: string[];
+  recommendedAccessoryProductIds?: string[];
+  optionalAccessoryProductIds?: string[];
 };
 
 type MotorRecommendation = {
@@ -437,6 +457,7 @@ export class CopilotService {
         tenantId: true,
         userId: true,
         sessionDbId: true,
+        draftPayload: true,
         usedAt: true,
         expiresAt: true,
       },
@@ -463,6 +484,50 @@ export class CopilotService {
     }
 
     const accessories = dto.accessories ?? [];
+    const payload = (confirmation.draftPayload ?? {}) as DraftConfirmationPayload;
+    const recommendationRunId =
+      dto.recommendationRunId ?? payload.recommendationRunId ?? null;
+
+    const accessoryOverridesByProductId = new Map<string, number>();
+
+    if (
+      accessories.length > 0 &&
+      (dto.cableLengthM !== undefined ||
+        dto.pipeLengthM !== undefined ||
+        dto.ropeLengthM !== undefined)
+    ) {
+      const accessoryProducts = await this.prisma.product.findMany({
+        where: {
+          tenantId,
+          id: {
+            in: accessories.map((item) => item.productId),
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+
+      for (const product of accessoryProducts) {
+        const name = product.name.toLowerCase();
+
+        if (dto.cableLengthM !== undefined && name.includes('cable')) {
+          accessoryOverridesByProductId.set(product.id, dto.cableLengthM);
+          continue;
+        }
+
+        if (dto.pipeLengthM !== undefined && name.includes('pipe')) {
+          accessoryOverridesByProductId.set(product.id, dto.pipeLengthM);
+          continue;
+        }
+
+        if (dto.ropeLengthM !== undefined && name.includes('rope')) {
+          accessoryOverridesByProductId.set(product.id, dto.ropeLengthM);
+          continue;
+        }
+      }
+    }
 
     const items = [
       ...(dto.motorProductId
@@ -475,7 +540,7 @@ export class CopilotService {
         : []),
       ...accessories.map((item) => ({
         productId: item.productId,
-        quantity: item.quantity,
+        quantity: accessoryOverridesByProductId.get(item.productId) ?? item.quantity,
       })),
     ];
 
@@ -493,10 +558,33 @@ export class CopilotService {
           .filter(Boolean)
           .join(' | ');
 
+    const accessoryProductIds = accessories.map((item) => item.productId);
+    const quoteMetadata: Record<string, unknown> = {
+      source: 'COPILOT_RECOMMENDATION',
+      appliedRuleCode: payload.appliedRuleCode ?? null,
+      selectedProductIds: items.map((item) => item.productId),
+      selectedAccessoryProductIds: accessoryProductIds,
+      requiredAccessoryProductIds: payload.requiredAccessoryProductIds ?? [],
+      recommendedAccessoryProductIds: payload.recommendedAccessoryProductIds ?? [],
+      optionalAccessoryProductIds: payload.optionalAccessoryProductIds ?? [],
+      installationQuantities:
+        dto.cableLengthM !== undefined ||
+        dto.pipeLengthM !== undefined ||
+        dto.ropeLengthM !== undefined
+          ? {
+              cableLengthM: dto.cableLengthM,
+              pipeLengthM: dto.pipeLengthM,
+              ropeLengthM: dto.ropeLengthM,
+            }
+          : null,
+    };
+
     const quote = await this.quotesService.create(tenantId, {
       customerId: dto.customerId,
       items,
       notes,
+      recommendationRunId: recommendationRunId ?? undefined,
+      metadata: quoteMetadata,
     });
 
     await this.prisma.copilotDraftConfirmation.update({
@@ -747,6 +835,7 @@ export class CopilotService {
           unitPrice: Number(p.sellingPrice),
           lineTotal: Number(p.sellingPrice),
           kind: 'ACCESSORY',
+          requirementType: 'REQUIRED',
         });
       }
       return acc;
@@ -764,6 +853,21 @@ export class CopilotService {
           unitPrice: Number(p.sellingPrice),
           lineTotal: Number(p.sellingPrice),
           kind: 'ACCESSORY',
+          requirementType: 'RECOMMENDED',
+        });
+      }
+      return acc;
+    }, []);
+
+    const optionalAccessoryItems = optional.reduce<
+      NonNullable<DraftQuotePreview['optionalItems']>
+    >((acc, name) => {
+      const p = byName.get(name);
+      if (p) {
+        acc.push({
+          productId: p.id,
+          name: p.name,
+          unitPrice: Number(p.sellingPrice),
         });
       }
       return acc;
@@ -779,6 +883,7 @@ export class CopilotService {
               unitPrice: Number(primaryRow.sellingPrice),
               lineTotal: Number(primaryRow.sellingPrice),
               kind: 'MOTOR' as const,
+              requirementType: 'REQUIRED' as const,
             },
           ]
         : []),
@@ -799,13 +904,15 @@ export class CopilotService {
       userId,
       sessionDbId,
       {
-        decisionRunId: decision.recommendationRunId,
+        recommendationRunId: decision.recommendationRunId,
+        appliedRuleCode: decision.appliedRule?.code,
         depth: depthFt,
         phase: phaseType,
         budget,
         primaryProductId: decision.primaryRecommendation.productId,
-        requiredItems: required,
-        recommendedItems: recommended,
+        requiredAccessoryProductIds: requiredAccessoryItems.map((item) => item.productId),
+        recommendedAccessoryProductIds: recommendedAccessoryItems.map((item) => item.productId),
+        optionalAccessoryProductIds: optionalAccessoryItems.map((item) => item.productId),
       },
     );
 
@@ -818,6 +925,8 @@ export class CopilotService {
       draftQuote: {
         depth: depthFt,
         recommendedHp: 'DecisionEngine',
+        recommendationRunId: decision.recommendationRunId,
+        appliedRuleCode: decision.appliedRule?.code,
         suggestedCustomerId: suggestedCustomer?.id,
         suggestedCustomerName: suggestedCustomer?.name,
         itemCount: draftItems.length,
@@ -825,6 +934,7 @@ export class CopilotService {
         accessorySubtotal,
         estimatedTotal,
         items: draftItems,
+        optionalItems: optionalAccessoryItems,
       },
       recommendation: decision,
       proposedAction: {

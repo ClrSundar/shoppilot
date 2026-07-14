@@ -74,6 +74,8 @@ export type CopilotChatResponse = {
 export type DraftQuotePreview = {
   depth: number;
   recommendedHp: string;
+  recommendationRunId?: string;
+  appliedRuleCode?: string;
   suggestedCustomerId?: string;
   suggestedCustomerName?: string;
   itemCount: number;
@@ -87,7 +89,21 @@ export type DraftQuotePreview = {
     unitPrice: number;
     lineTotal: number;
     kind: 'MOTOR' | 'ACCESSORY';
+    requirementType?: 'REQUIRED' | 'RECOMMENDED' | 'OPTIONAL';
   }>;
+  optionalItems?: Array<{
+    productId: string;
+    name: string;
+    unitPrice: number;
+  }>;
+};
+
+export type RecommendationFeedbackRequest = {
+  runId: string;
+  action: 'ACCEPTED' | 'CHANGED_PRODUCT' | 'REJECTED';
+  selectedAlternativeProductId?: string;
+  reason?: 'PRICE' | 'STOCK' | 'CUSTOMER_PREFERENCE' | 'BRAND_PREFERENCE' | 'OTHER';
+  notes?: string;
 };
 
 export type PreviousMessage = {
@@ -139,6 +155,10 @@ export const copilotService = {
     accessories: Array<{ productId: string; quantity: number }>;
     depth?: number;
     recommendedHp?: string;
+    recommendationRunId?: string;
+    cableLengthM?: number;
+    pipeLengthM?: number;
+    ropeLengthM?: number;
     notes?: string;
   }) => {
     const res = await api.post<{
@@ -150,6 +170,20 @@ export const copilotService = {
       customer: { id: string; name: string };
       idempotentReplay: boolean;
     }>('/copilot/confirm-draft', payload);
+
+    return res.data;
+  },
+
+  submitRecommendationFeedback: async (payload: RecommendationFeedbackRequest) => {
+    const res = await api.post<{
+      runId: string;
+      feedbackId: string;
+      action: string;
+      acceptedProductIds: string[];
+      rejectedProductIds: string[];
+      notes: string | null;
+      createdAt: string;
+    }>('/decisions/feedback', payload);
 
     return res.data;
   },

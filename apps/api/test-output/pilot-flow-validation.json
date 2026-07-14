@@ -1,0 +1,124 @@
+{
+  "executedAt": "2026-07-06T09:20:09.932Z",
+  "chat": {
+    "recommendationRunId": "3158e3f4-48ca-4bef-a47a-5ae176754ee8",
+    "appliedRule": "BORE_WELL_300_360_SINGLE",
+    "draftItemCount": 5,
+    "optionalItems": [
+      {
+        "productId": "f72e4325-7142-47ab-82e2-7f163a28673a",
+        "name": "Non Return Valve",
+        "unitPrice": 1200
+      }
+    ]
+  },
+  "confirmPayload": {
+    "sessionId": "session-1783329609845-7xrdol",
+    "confirmationToken": "cpt_ps0lkyjx_mr90elkd",
+    "idempotencyKey": "pilot-validate-1783329609909",
+    "customerId": "e7d5a4d0-38b4-45e9-bee0-0fae37f2b50d",
+    "motorProductId": "ddb8e601-3402-44f1-b540-e36563629639",
+    "accessories": [
+      {
+        "productId": "ac63af73-e788-4a3c-baa7-2acfde3d32e8",
+        "quantity": 1
+      },
+      {
+        "productId": "571b796a-2c34-44c8-b9f1-d0bebc93788f",
+        "quantity": 1
+      },
+      {
+        "productId": "cfbc7cf9-0daa-4a0c-878a-91379d40fe21",
+        "quantity": 1
+      },
+      {
+        "productId": "d6573fb0-ad0a-4f7f-968f-403db00b5365",
+        "quantity": 1
+      }
+    ],
+    "depth": 330,
+    "recommendedHp": "DecisionEngine",
+    "recommendationRunId": "3158e3f4-48ca-4bef-a47a-5ae176754ee8",
+    "cableLengthM": 330,
+    "pipeLengthM": 330,
+    "ropeLengthM": 340
+  },
+  "confirm": {
+    "success": true,
+    "quoteId": "d9b7a028-4f01-41ff-a27d-0f61976ea2e3",
+    "quoteNumber": "QT-00002",
+    "status": "DRAFT",
+    "totalAmount": 35181,
+    "customer": {
+      "id": "e7d5a4d0-38b4-45e9-bee0-0fae37f2b50d",
+      "name": "Demo Walk-in Customer"
+    },
+    "idempotentReplay": false
+  },
+  "quote": {
+    "id": "d9b7a028-4f01-41ff-a27d-0f61976ea2e3",
+    "quoteNumber": "QT-00002",
+    "recommendationRunId": "3158e3f4-48ca-4bef-a47a-5ae176754ee8",
+    "metadata": {
+      "source": "COPILOT_RECOMMENDATION",
+      "appliedRuleCode": "BORE_WELL_300_360_SINGLE",
+      "selectedProductIds": [
+        "ddb8e601-3402-44f1-b540-e36563629639",
+        "ac63af73-e788-4a3c-baa7-2acfde3d32e8",
+        "571b796a-2c34-44c8-b9f1-d0bebc93788f",
+        "cfbc7cf9-0daa-4a0c-878a-91379d40fe21",
+        "d6573fb0-ad0a-4f7f-968f-403db00b5365"
+      ],
+      "installationQuantities": {
+        "pipeLengthM": 330,
+        "ropeLengthM": 340,
+        "cableLengthM": 330
+      },
+      "optionalAccessoryProductIds": [
+        "f72e4325-7142-47ab-82e2-7f163a28673a"
+      ],
+      "requiredAccessoryProductIds": [
+        "ac63af73-e788-4a3c-baa7-2acfde3d32e8"
+      ],
+      "selectedAccessoryProductIds": [
+        "ac63af73-e788-4a3c-baa7-2acfde3d32e8",
+        "571b796a-2c34-44c8-b9f1-d0bebc93788f",
+        "cfbc7cf9-0daa-4a0c-878a-91379d40fe21",
+        "d6573fb0-ad0a-4f7f-968f-403db00b5365"
+      ],
+      "recommendedAccessoryProductIds": [
+        "571b796a-2c34-44c8-b9f1-d0bebc93788f",
+        "cfbc7cf9-0daa-4a0c-878a-91379d40fe21",
+        "d6573fb0-ad0a-4f7f-968f-403db00b5365"
+      ]
+    },
+    "items": [
+      {
+        "productName": "Texmo 3HP Single Phase Submersible Motor",
+        "quantity": "1",
+        "unitPrice": "30500"
+      },
+      {
+        "productName": "3HP Single Phase Motor Starter",
+        "quantity": "1",
+        "unitPrice": "4500"
+      },
+      {
+        "productName": "4 sqmm Submersible Cable",
+        "quantity": "1",
+        "unitPrice": "95"
+      },
+      {
+        "productName": "Nylon Safety Rope",
+        "quantity": "1",
+        "unitPrice": "18"
+      },
+      {
+        "productName": "32mm HDPE Pipe",
+        "quantity": "1",
+        "unitPrice": "68"
+      }
+    ],
+    "totalAmount": "35181"
+  }
+}

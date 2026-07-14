@@ -6,6 +6,8 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import type { QuoteStatus } from './dto/update-quote-status.dto';
+import type { AgentDiscountCategory } from './dto/create-quote.dto';
+import { defaultAgentDiscountByCategory } from '../tenant-settings/agent-discount-config.constants';
 
 const inventoryMovementType = {
   RESERVE: 'RESERVE',
@@ -16,6 +18,86 @@ const inventoryMovementType = {
 @Injectable()
 export class QuotesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private parseQuoteMetadata(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+
+    return value as Record<string, unknown>;
+  }
+
+  private async getDiscountDefaultsByCategory(
+    tenantId: string,
+  ): Promise<Record<AgentDiscountCategory, number>> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: {
+        id: tenantId,
+      },
+      select: {
+        agentDiscountConfig: true,
+      },
+    });
+
+    const config =
+      tenant?.agentDiscountConfig &&
+      typeof tenant.agentDiscountConfig === 'object' &&
+      !Array.isArray(tenant.agentDiscountConfig)
+        ? (tenant.agentDiscountConfig as Record<string, unknown>)
+        : {};
+
+    const resolvedDefaults = {
+      ...defaultAgentDiscountByCategory,
+    };
+
+    for (const category of Object.keys(defaultAgentDiscountByCategory) as AgentDiscountCategory[]) {
+      const configuredValue = config[category];
+
+      if (
+        typeof configuredValue === 'number' &&
+        Number.isFinite(configuredValue) &&
+        configuredValue >= 0 &&
+        configuredValue <= 100
+      ) {
+        resolvedDefaults[category] = Number(configuredValue);
+      }
+    }
+
+    return resolvedDefaults;
+  }
+
+  private async resolveDiscount(
+    tenantId: string,
+    dto: Pick<CreateQuoteDto, 'agentCategory' | 'discountPercentage'>,
+    subtotal: number,
+  ) {
+    const discountDefaults = await this.getDiscountDefaultsByCategory(tenantId);
+
+    const defaultDiscountPercentage = dto.agentCategory
+      ? discountDefaults[dto.agentCategory]
+      : 0;
+
+    const discountPercentage =
+      dto.discountPercentage !== undefined
+        ? dto.discountPercentage
+        : defaultDiscountPercentage;
+
+    const discountAmount = Number(
+      ((subtotal * discountPercentage) / 100).toFixed(2),
+    );
+
+    const taxableAmount = Number((subtotal - discountAmount).toFixed(2));
+    const taxAmount = 0;
+    const totalAmount = Number((taxableAmount + taxAmount).toFixed(2));
+
+    return {
+      agentCategory: dto.agentCategory ?? null,
+      discountPercentage,
+      discountAmount,
+      taxAmount,
+      totalAmount,
+    };
+  }
 
   private async resolveAgentCommission(
     tenantId: string,
@@ -317,8 +399,6 @@ export class QuotesService {
     return {
       quoteItems,
       subtotal,
-      taxAmount: 0,
-      totalAmount: subtotal,
     };
   }
 
@@ -344,8 +424,15 @@ export class QuotesService {
 
     const quoteNumber = await this.generateQuoteNumber(tenantId);
 
-    const { quoteItems, subtotal, taxAmount, totalAmount } =
-      await this.buildQuoteItems(tenantId, dto.items);
+    const { quoteItems, subtotal } = await this.buildQuoteItems(tenantId, dto.items);
+
+    const {
+      agentCategory,
+      discountPercentage,
+      discountAmount,
+      taxAmount,
+      totalAmount,
+    } = await this.resolveDiscount(tenantId, dto, subtotal);
 
     const {
       agentId,
@@ -365,10 +452,19 @@ export class QuotesService {
         subtotal,
         taxAmount,
         totalAmount,
+        discountAmount,
         agentCommissionPercentage,
         agentCommissionAmount,
 
         notes: dto.notes,
+        recommendationRunId: dto.recommendationRunId,
+        metadata: {
+          ...this.parseQuoteMetadata(dto.metadata),
+          quoteDiscount: {
+            agentCategory,
+            discountPercentage,
+          },
+        } as Prisma.InputJsonValue,
 
         items: {
           create: quoteItems,
@@ -531,8 +627,15 @@ export class QuotesService {
       throw new BadRequestException('Customer not found.');
     }
 
-    const { quoteItems, subtotal, taxAmount, totalAmount } =
-      await this.buildQuoteItems(tenantId, dto.items);
+    const { quoteItems, subtotal } = await this.buildQuoteItems(tenantId, dto.items);
+
+    const {
+      agentCategory,
+      discountPercentage,
+      discountAmount,
+      taxAmount,
+      totalAmount,
+    } = await this.resolveDiscount(tenantId, dto, subtotal);
 
     const {
       agentId,
@@ -551,8 +654,17 @@ export class QuotesService {
         subtotal,
         taxAmount,
         totalAmount,
+        discountAmount,
         agentCommissionPercentage,
         agentCommissionAmount,
+        metadata: {
+          ...this.parseQuoteMetadata(quote.metadata),
+          ...this.parseQuoteMetadata(dto.metadata),
+          quoteDiscount: {
+            agentCategory,
+            discountPercentage,
+          },
+        } as Prisma.InputJsonValue,
         items: {
           deleteMany: {},
           create: quoteItems,

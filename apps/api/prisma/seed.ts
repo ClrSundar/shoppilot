@@ -4,6 +4,8 @@ import {
   CompatibilityRelationType,
   RequirementType,
   DecisionRuleStatus,
+  RecommendationAction,
+  RecommendationRunStatus,
   UserRole,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -621,6 +623,318 @@ async function seedDecisionRules(templateMap: Record<string, string>) {
 }
 
 // ============================================================================
+// STEP 7 — DEMO PILOT DATA (customers, quotes, recommendation runs/feedback)
+// ============================================================================
+
+async function seedDemoPilotData(
+  tenantId: string,
+  skuMap: Record<string, string>,
+) {
+  console.log('\n🧪 Seeding demo pilot data...');
+
+  const customerSeeds = [
+    { name: 'Ravi Borewell Works', phone: '9000000001' },
+    { name: 'Lakshmi Farms', phone: '9000000002' },
+    { name: 'Suresh Agro', phone: '9000000003' },
+    { name: 'Greenfield Estates', phone: '9000000004' },
+    { name: 'City Pumps Service', phone: '9000000005' },
+  ];
+
+  const customerMap: Record<string, string> = {};
+
+  for (const customer of customerSeeds) {
+    const existing = await prisma.customer.findFirst({
+      where: {
+        tenantId,
+        phone: customer.phone,
+      },
+    });
+
+    const upserted = existing
+      ? await prisma.customer.update({
+          where: { id: existing.id },
+          data: {
+            name: customer.name,
+            active: true,
+          },
+        })
+      : await prisma.customer.create({
+          data: {
+            tenantId,
+            name: customer.name,
+            phone: customer.phone,
+            active: true,
+          },
+        });
+
+    customerMap[customer.name] = upserted.id;
+  }
+
+  const existingQuoteCount = await prisma.quote.count({
+    where: { tenantId },
+  });
+
+  const productRows = await prisma.product.findMany({
+    where: {
+      tenantId,
+      id: {
+        in: Object.values(skuMap),
+      },
+    },
+    select: {
+      id: true,
+      sellingPrice: true,
+    },
+  });
+
+  const productPriceById = new Map(
+    productRows.map((product) => [product.id, Number(product.sellingPrice)]),
+  );
+
+  if (existingQuoteCount < 5) {
+    const quoteTemplates: Array<{
+      customerName: string;
+      skus: Array<{ sku: string; qty: number }>;
+      notes: string;
+    }> = [
+      {
+        customerName: 'Ravi Borewell Works',
+        skus: [
+          { sku: 'MOT-TEX-3HP-1P', qty: 1 },
+          { sku: 'STR-3HP-1P', qty: 1 },
+          { sku: 'CAB-4SQMM', qty: 330 },
+          { sku: 'PIP-HDPE-32', qty: 330 },
+          { sku: 'ROP-NYLON', qty: 340 },
+        ],
+        notes: 'Demo quote for 330 ft single phase installation',
+      },
+      {
+        customerName: 'Lakshmi Farms',
+        skus: [
+          { sku: 'MOT-CRI-2HP-1P', qty: 1 },
+          { sku: 'ROP-NYLON', qty: 260 },
+          { sku: 'VAL-FOOT-BRASS', qty: 1 },
+        ],
+        notes: 'Demo quote for 250 ft 2HP setup',
+      },
+      {
+        customerName: 'Suresh Agro',
+        skus: [
+          { sku: 'MOT-CRI-5HP-3P', qty: 1 },
+          { sku: 'STR-5HP-3P', qty: 1 },
+          { sku: 'CAB-6SQMM', qty: 500 },
+          { sku: 'PIP-HDPE-40', qty: 500 },
+        ],
+        notes: 'Demo quote for 500 ft three phase installation',
+      },
+      {
+        customerName: 'Greenfield Estates',
+        skus: [
+          { sku: 'MOT-KIR-3HP-1P', qty: 1 },
+          { sku: 'STR-3HP-1P', qty: 1 },
+          { sku: 'CAB-4SQMM', qty: 320 },
+          { sku: 'PIP-HDPE-32', qty: 320 },
+        ],
+        notes: 'Demo quote showing alternate brand choice',
+      },
+      {
+        customerName: 'City Pumps Service',
+        skus: [
+          { sku: 'MOT-TEX-2HP-1P', qty: 1 },
+          { sku: 'ROP-NYLON', qty: 220 },
+        ],
+        notes: 'Low-budget demo quote',
+      },
+    ];
+
+    const missingTemplates = quoteTemplates.slice(existingQuoteCount);
+
+    for (let index = 0; index < missingTemplates.length; index += 1) {
+      const template = missingTemplates[index];
+      const lineItems = template.skus
+        .map((entry) => {
+          const productId = skuMap[entry.sku];
+          const price = productId ? productPriceById.get(productId) : undefined;
+
+          if (!productId || price === undefined) {
+            return null;
+          }
+
+          const lineTotal = Number((entry.qty * price).toFixed(2));
+          return {
+            productId,
+            productName: PRODUCTS.find((product) => product.sku === entry.sku)?.name ?? entry.sku,
+            quantity: entry.qty,
+            unitPrice: price,
+            lineTotal,
+          };
+        })
+        .filter(
+          (line): line is {
+            productId: string;
+            productName: string;
+            quantity: number;
+            unitPrice: number;
+            lineTotal: number;
+          } => line !== null,
+        );
+
+      if (lineItems.length === 0) {
+        continue;
+      }
+
+      const subtotal = Number(
+        lineItems.reduce((sum, item) => sum + item.lineTotal, 0).toFixed(2),
+      );
+
+      await prisma.quote.create({
+        data: {
+          tenantId,
+          customerId: customerMap[template.customerName],
+          quoteNumber: `QT-${String(existingQuoteCount + index + 1).padStart(5, '0')}`,
+          status: 'DRAFT',
+          subtotal,
+          taxAmount: 0,
+          totalAmount: subtotal,
+          notes: template.notes,
+          items: {
+            create: lineItems,
+          },
+        },
+      });
+    }
+  }
+
+  const owner = await prisma.user.findFirst({
+    where: {
+      tenantId,
+      email: 'owner@demo.com',
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  const ruleMap = await prisma.decisionRule.findMany({
+    where: {
+      code: {
+        in: [
+          'BORE_WELL_200_280_SINGLE',
+          'BORE_WELL_300_360_SINGLE',
+          'BORE_WELL_400_550_THREE',
+        ],
+      },
+    },
+    select: {
+      id: true,
+      code: true,
+    },
+  });
+
+  const ruleIdByCode = new Map(ruleMap.map((rule) => [rule.code, rule.id]));
+
+  const existingRuns = await prisma.recommendationRun.count({
+    where: { tenantId },
+  });
+
+  if (existingRuns < 4 && owner) {
+    const runTemplates = [
+      {
+        status: RecommendationRunStatus.MATCHED,
+        queryInputs: { boreDepthFt: 330, phase: 'SINGLE', budget: 50000 },
+        ruleCode: 'BORE_WELL_300_360_SINGLE',
+        candidateSku: 'MOT-TEX-3HP-1P',
+        candidateScore: 96,
+        feedback: RecommendationAction.ACCEPTED,
+      },
+      {
+        status: RecommendationRunStatus.MATCHED,
+        queryInputs: { boreDepthFt: 250, phase: 'SINGLE', budget: 40000 },
+        ruleCode: 'BORE_WELL_200_280_SINGLE',
+        candidateSku: 'MOT-CRI-2HP-1P',
+        candidateScore: 94,
+        feedback: RecommendationAction.ACCEPTED,
+      },
+      {
+        status: RecommendationRunStatus.MATCHED,
+        queryInputs: { boreDepthFt: 330, phase: 'SINGLE', budget: 50000 },
+        ruleCode: 'BORE_WELL_300_360_SINGLE',
+        candidateSku: 'MOT-KIR-3HP-1P',
+        candidateScore: 82,
+        feedback: RecommendationAction.REJECTED,
+      },
+      {
+        status: RecommendationRunStatus.MATCHED,
+        queryInputs: { boreDepthFt: 330, phase: 'SINGLE', budget: 20000 },
+        ruleCode: 'BORE_WELL_300_360_SINGLE',
+        candidateSku: 'MOT-TEX-3HP-1P',
+        candidateScore: 96,
+        feedback: null,
+      },
+    ];
+
+    for (const template of runTemplates.slice(existingRuns)) {
+      const candidateProductId = skuMap[template.candidateSku];
+      const decisionRuleId = ruleIdByCode.get(template.ruleCode);
+
+      if (!candidateProductId || !decisionRuleId) {
+        continue;
+      }
+
+      const run = await prisma.recommendationRun.create({
+        data: {
+          tenantId,
+          userId: owner.id,
+          status: template.status,
+          queryInputs: template.queryInputs,
+          decisionRuleId,
+          totalCandidates: 1,
+          topScore: template.candidateScore,
+        },
+      });
+
+      await prisma.recommendationCandidate.create({
+        data: {
+          runId: run.id,
+          productId: candidateProductId,
+          rank: 1,
+          totalScore: template.candidateScore,
+          scoreStock: 30,
+          scorePriceMatch: 16,
+          scoreAttributeMatch: 40,
+          scorePreference: 10,
+          selectedReason: 'Demo seeded recommendation candidate',
+        },
+      });
+
+      if (template.feedback) {
+        await prisma.recommendationFeedback.create({
+          data: {
+            runId: run.id,
+            userId: owner.id,
+            action: template.feedback,
+            acceptedProductIds:
+              template.feedback === RecommendationAction.ACCEPTED
+                ? [candidateProductId]
+                : [],
+            rejectedProductIds:
+              template.feedback === RecommendationAction.REJECTED
+                ? [candidateProductId]
+                : [],
+            notes:
+              template.feedback === RecommendationAction.ACCEPTED
+                ? 'Seeded demo accepted recommendation'
+                : 'Seeded demo rejected recommendation',
+          },
+        });
+      }
+    }
+  }
+
+  console.log('  ✅ Demo pilot dataset ready');
+}
+
+// ============================================================================
 // ORCHESTRATOR
 // ============================================================================
 
@@ -636,6 +950,7 @@ async function runAllSeeds() {
     await seedCompatibility(tenant.id, skuMap);
     const templateMap = await seedSolutionTemplates(tenant.id, skuMap);
     await seedDecisionRules(templateMap);
+    await seedDemoPilotData(tenant.id, skuMap);
 
     console.log('\n✨ All seeds completed successfully!');
     console.log(`\n📊 Summary:`);

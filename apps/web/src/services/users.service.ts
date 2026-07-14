@@ -9,6 +9,21 @@ export type TeamUser = {
   createdAt: string;
 };
 
+export type CurrentUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: TeamUser['role'];
+  active: boolean;
+  tenant: {
+    id: string;
+    name: string;
+    code: string;
+    businessType: 'ELECTRICAL' | 'PLUMBING' | 'MOTOR' | 'GENERAL';
+    status: string;
+  };
+};
+
 export type CreateUserPayload = {
   name: string;
   email: string;
@@ -24,6 +39,11 @@ export type BulkUploadResult = {
 };
 
 export const usersService = {
+  getMe: async (): Promise<CurrentUser> => {
+    const res = await api.get('/users/me');
+    return res.data;
+  },
+
   getAll: async (): Promise<TeamUser[]> => {
     const res = await api.get('/users');
     return res.data;

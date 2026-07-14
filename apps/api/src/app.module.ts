@@ -20,6 +20,10 @@ import { UnifiedBulkUploadModule } from './modules/unified-bulk-upload/unified-b
 import { AgentsModule } from './modules/agents/agents.module';
 import { CopilotModule } from './modules/copilot/copilot.module';
 import { DecisionModule } from './modules/decisions/decisions.module';
+import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
+import { PurchasesModule } from './modules/purchases/purchases.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { ReturnsModule } from './modules/returns/returns.module';
 
 @Module({
   imports: [
@@ -44,6 +48,10 @@ import { DecisionModule } from './modules/decisions/decisions.module';
     AgentsModule,
     CopilotModule,
     DecisionModule,
+    TenantSettingsModule,
+    PurchasesModule,
+    PaymentsModule,
+    ReturnsModule,
   ],
   providers: [
     {

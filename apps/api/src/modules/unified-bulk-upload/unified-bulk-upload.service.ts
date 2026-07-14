@@ -384,6 +384,29 @@ export class UnifiedBulkUploadService {
       select: { name: true, sku: true },
     });
 
+    const attributeDefinitions = await this.prisma.attributeDefinition.findMany({
+      where: {
+        OR: [
+          { tenantId: null },
+          { tenantId },
+        ],
+        code: {
+          in: ['HP', 'HEAD', 'PHASE'],
+        },
+        active: true,
+      },
+      orderBy: [
+        { tenantId: 'desc' },
+      ],
+    });
+
+    const attributeDefByCode = new Map<string, string>();
+    for (const definition of attributeDefinitions) {
+      if (!attributeDefByCode.has(definition.code)) {
+        attributeDefByCode.set(definition.code, definition.id);
+      }
+    }
+
     const productNameSet = new Set(
       existingProducts.map((p) => p.name.toLowerCase()),
     );
@@ -442,7 +465,7 @@ export class UnifiedBulkUploadService {
         continue;
       }
 
-      await this.prisma.product.create({
+      const createdProduct = await this.prisma.product.create({
         data: {
           tenantId,
           categoryId,
@@ -455,6 +478,46 @@ export class UnifiedBulkUploadService {
           imageUrl: getStringCell(row, ['imageurl', 'image']) || undefined,
         },
       });
+
+      const hp = getNumberCell(row, ['hp', 'horsepower']);
+      const head = getNumberCell(row, ['head', 'headft', 'headfeet']);
+      const phaseRaw = getStringCell(row, ['phase']);
+      const phase = phaseRaw
+        ? phaseRaw.trim().toUpperCase().startsWith('3') ||
+          phaseRaw.toLowerCase().includes('three')
+          ? 'THREE'
+          : 'SINGLE'
+        : null;
+
+      if (hp !== null && attributeDefByCode.get('HP')) {
+        await this.prisma.productAttributeValue.create({
+          data: {
+            productId: createdProduct.id,
+            attributeDefinitionId: attributeDefByCode.get('HP') as string,
+            valueNumber: hp,
+          },
+        });
+      }
+
+      if (head !== null && attributeDefByCode.get('HEAD')) {
+        await this.prisma.productAttributeValue.create({
+          data: {
+            productId: createdProduct.id,
+            attributeDefinitionId: attributeDefByCode.get('HEAD') as string,
+            valueNumber: head,
+          },
+        });
+      }
+
+      if (phase && attributeDefByCode.get('PHASE')) {
+        await this.prisma.productAttributeValue.create({
+          data: {
+            productId: createdProduct.id,
+            attributeDefinitionId: attributeDefByCode.get('PHASE') as string,
+            valueText: phase,
+          },
+        });
+      }
 
       productNameSet.add(name.toLowerCase());
       if (sku) {
