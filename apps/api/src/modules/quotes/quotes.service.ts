@@ -149,7 +149,7 @@ export class QuotesService {
   private async reserveInventoryForQuote(
     tx: any,
     tenantId: string,
-    userId: string,
+    userId: string | null,
     quote: {
       id: string;
       quoteNumber: string;
@@ -222,7 +222,7 @@ export class QuotesService {
   private async dispatchInventoryForQuote(
     tx: any,
     tenantId: string,
-    userId: string,
+    userId: string | null,
     quote: {
       id: string;
       quoteNumber: string;
@@ -295,7 +295,7 @@ export class QuotesService {
   private async releaseInventoryForQuote(
     tx: any,
     tenantId: string,
-    userId: string,
+    userId: string | null,
     quote: {
       id: string;
       quoteNumber: string;
@@ -381,7 +381,21 @@ export class QuotesService {
         throw new BadRequestException(`Product not found: ${item.productId}`);
       }
 
-      const unitPrice = Number(product.sellingPrice);
+      // Use overridden price if provided, else fall back to product selling price.
+      const requestedUnitPrice =
+        item.unitPrice !== undefined ? item.unitPrice : Number(product.sellingPrice);
+
+      // Enforce landing price floor.
+      if (product.landingPrice !== null) {
+        const landingPrice = Number(product.landingPrice);
+        if (requestedUnitPrice < landingPrice) {
+          throw new BadRequestException(
+            `Unit price for "${product.name}" cannot be below the landing price of ${landingPrice}`,
+          );
+        }
+      }
+
+      const unitPrice = requestedUnitPrice;
 
       const lineTotal = unitPrice * item.quantity;
 
@@ -408,6 +422,48 @@ export class QuotesService {
     });
 
     return `QT-${String(count + 1).padStart(5, '0')}`;
+  }
+
+  private getQuoteValidUntilDate() {
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + 7);
+    return validUntil;
+  }
+
+  private async expireOverdueQuotes(tenantId: string) {
+    const overdueQuotes = await this.prisma.quote.findMany({
+      where: {
+        tenantId,
+        status: {
+          in: ['DRAFT', 'SENT', 'APPROVED'],
+        },
+        validUntil: {
+          not: null,
+          lt: new Date(),
+        },
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    for (const quote of overdueQuotes) {
+      await this.prisma.$transaction(async (tx) => {
+        if (quote.stockReserved) {
+          await this.releaseInventoryForQuote(tx, tenantId, null, quote);
+        }
+
+        await tx.quote.update({
+          where: {
+            id: quote.id,
+          },
+          data: {
+            status: 'EXPIRED',
+            stockReserved: false,
+          },
+        });
+      });
+    }
   }
 
   async create(tenantId: string, dto: CreateQuoteDto) {
@@ -452,6 +508,7 @@ export class QuotesService {
         subtotal,
         taxAmount,
         totalAmount,
+        validUntil: this.getQuoteValidUntilDate(),
         discountAmount,
         agentCommissionPercentage,
         agentCommissionAmount,
@@ -479,6 +536,8 @@ export class QuotesService {
   }
 
   async findAll(tenantId: string) {
+    await this.expireOverdueQuotes(tenantId);
+
     return this.prisma.quote.findMany({
       where: {
         tenantId,
@@ -499,6 +558,8 @@ export class QuotesService {
   }
 
   async findOne(tenantId: string, quoteId: string) {
+    await this.expireOverdueQuotes(tenantId);
+
     return this.prisma.quote.findFirst({
       where: {
         id: quoteId,
@@ -522,6 +583,8 @@ export class QuotesService {
     quoteId: string,
     status: QuoteStatus,
   ) {
+    await this.expireOverdueQuotes(tenantId);
+
     const quote = await this.prisma.quote.findFirst({
       where: {
         id: quoteId,
@@ -534,6 +597,12 @@ export class QuotesService {
 
     if (!quote) {
       throw new BadRequestException('Quote not found');
+    }
+
+    if (quote.status === 'EXPIRED' && status !== 'EXPIRED') {
+      throw new BadRequestException(
+        'Quote has expired. Create a revision to continue.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -601,6 +670,8 @@ export class QuotesService {
   }
 
   async update(tenantId: string, quoteId: string, dto: UpdateQuoteDto) {
+    await this.expireOverdueQuotes(tenantId);
+
     const quote = await this.prisma.quote.findFirst({
       where: {
         id: quoteId,

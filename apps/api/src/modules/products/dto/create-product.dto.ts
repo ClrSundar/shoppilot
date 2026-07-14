@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateProductDto {
@@ -23,6 +23,11 @@ export class CreateProductDto {
   @Type(() => Number)
   @IsNumber()
   costPrice: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  landingPrice?: number;
 
   @Type(() => Number)
   @IsNumber()

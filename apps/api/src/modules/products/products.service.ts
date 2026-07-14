@@ -126,6 +126,24 @@ export class ProductsService {
     };
   }
 
+  private validatePrices(dto: { costPrice?: number; landingPrice?: number; sellingPrice?: number }) {
+    const landingPrice = dto.landingPrice;
+    const sellingPrice = dto.sellingPrice;
+    const costPrice = dto.costPrice;
+
+    if (landingPrice !== undefined && costPrice !== undefined && landingPrice < costPrice) {
+      throw new BadRequestException(
+        'Landing price cannot be less than cost price',
+      );
+    }
+
+    if (landingPrice !== undefined && sellingPrice !== undefined && sellingPrice < landingPrice) {
+      throw new BadRequestException(
+        'Selling price cannot be less than landing price',
+      );
+    }
+  }
+
   async create(tenantId: string, dto: CreateProductDto) {
     const category = await this.prisma.productCategory.findFirst({
       where: {
@@ -137,6 +155,8 @@ export class ProductsService {
     if (!category) {
       throw new BadRequestException('Invalid category');
     }
+
+    this.validatePrices(dto);
 
     return this.prisma.product.create({
       data: {
@@ -153,6 +173,8 @@ export class ProductsService {
         unit: dto.unit || 'NOS',
 
         costPrice: dto.costPrice,
+
+        landingPrice: dto.landingPrice ?? null,
 
         sellingPrice: dto.sellingPrice,
 
@@ -255,6 +277,12 @@ export class ProductsService {
         throw new BadRequestException('Invalid category');
       }
     }
+
+    this.validatePrices({
+      costPrice: dto.costPrice ?? Number(existingProduct.costPrice),
+      landingPrice: dto.landingPrice ?? (existingProduct.landingPrice !== null ? Number(existingProduct.landingPrice) : undefined),
+      sellingPrice: dto.sellingPrice ?? Number(existingProduct.sellingPrice),
+    });
 
     return this.prisma.product.update({
       where: {

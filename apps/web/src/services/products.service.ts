@@ -8,6 +8,7 @@ export type Product = {
   brand?: string | null;
   unit: string;
   costPrice: string;
+  landingPrice?: string | null;
   sellingPrice: string;
   active: boolean;
   category: {
@@ -24,6 +25,7 @@ export type CreateProductPayload = {
   brand?: string;
   unit?: string;
   costPrice: number;
+  landingPrice?: number | null;
   sellingPrice: number;
 };
 

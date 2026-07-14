@@ -39,6 +39,7 @@ export default function ProductsPage() {
   const [brand, setBrand] = useState('');
   const [unit, setUnit] = useState('NOS');
   const [costPrice, setCostPrice] = useState('');
+  const [landingPrice, setLandingPrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
@@ -139,6 +140,7 @@ export default function ProductsPage() {
     { field: 'brand', headerName: 'Brand', flex: 1 },
     { field: 'unit', headerName: 'Unit', width: 100 },
     { field: 'costPrice', headerName: 'Cost Price', width: 130 },
+    { field: 'landingPrice', headerName: 'Landing Price', width: 140 },
     { field: 'sellingPrice', headerName: 'Selling Price', width: 150 },
     {
       field: 'actions',
@@ -236,6 +238,7 @@ export default function ProductsPage() {
     setBrand('');
     setUnit('NOS');
     setCostPrice('');
+    setLandingPrice('');
     setSellingPrice('');
   };
 
@@ -246,6 +249,7 @@ export default function ProductsPage() {
     setBrand('');
     setUnit('NOS');
     setCostPrice('');
+    setLandingPrice('');
     setSellingPrice('');
     setOpen(true);
   };
@@ -257,6 +261,7 @@ export default function ProductsPage() {
     setBrand(product.brand ?? '');
     setUnit(product.unit ?? 'NOS');
     setCostPrice(String(product.costPrice ?? ''));
+    setLandingPrice(product.landingPrice ? String(product.landingPrice) : '');
     setSellingPrice(String(product.sellingPrice ?? ''));
     setOpen(true);
   };
@@ -281,6 +286,7 @@ export default function ProductsPage() {
       brand,
       unit,
       costPrice: Number(costPrice),
+      landingPrice: landingPrice ? Number(landingPrice) : null,
       sellingPrice: Number(sellingPrice),
     };
 
@@ -421,6 +427,15 @@ export default function ProductsPage() {
               type="number"
               value={costPrice}
               onChange={(e) => setCostPrice(e.target.value)}
+              fullWidth
+            />
+
+            <TextField
+              label="Landing Price (optional)"
+              type="number"
+              value={landingPrice}
+              onChange={(e) => setLandingPrice(e.target.value)}
+              helperText="Total cost to bring to warehouse (cost + freight + duties). Unit price in quotes cannot go below this."
               fullWidth
             />
 

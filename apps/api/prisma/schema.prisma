@@ -298,6 +298,7 @@ model Product {
   unit          String   @default("NOS")
 
   costPrice     Decimal  @db.Decimal(12,2)
+  landingPrice  Decimal? @db.Decimal(12,2)
   sellingPrice  Decimal  @db.Decimal(12,2)
 
   gstRate       Decimal? @db.Decimal(5,2)

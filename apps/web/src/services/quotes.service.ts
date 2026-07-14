@@ -8,6 +8,7 @@ export type Quote = {
   subtotal: string;
   taxAmount: string;
   totalAmount: string;
+  validUntil?: string | null;
   discountAmount?: string;
   createdAt: string;
   notes?: string | null;
@@ -19,6 +20,8 @@ export type Quote = {
       agentCategory?: AgentCategory | null;
       discountPercentage?: number;
     };
+    revisionOfQuoteId?: string | null;
+    revisionOfQuoteNumber?: string | null;
   } | null;
   customer: {
     id: string;
@@ -111,8 +114,10 @@ export type CreateQuotePayload = {
   items: {
     productId: string;
     quantity: number;
+    unitPrice?: number;
   }[];
   notes?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type UpdateQuotePayload = CreateQuotePayload;
