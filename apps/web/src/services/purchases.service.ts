@@ -42,11 +42,7 @@ export type PurchaseOrder = {
 };
 
 export type CreatePurchaseOrderPayload = {
-  supplierId?: string;
-  supplierName?: string;
-  supplierPhone?: string;
-  supplierEmail?: string;
-  supplierGstNumber?: string;
+  supplierId: string;
   expectedDate?: string;
   notes?: string;
   taxPercentage?: number;

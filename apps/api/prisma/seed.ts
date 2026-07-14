@@ -1123,43 +1123,48 @@ async function seedCommercialData(
         },
       });
 
-      const fallbackPo = await prisma.purchaseOrder.findFirst({
-        where: {
-          tenantId,
-          orderNumber: `PO-${String(existingPoCount + 2).padStart(5, '0')}`,
-        },
-        select: { id: true },
-      });
+      const aquaTech = supplierByName.get('Aqua Tech Wholesale');
 
-      if (!fallbackPo) {
-        await prisma.purchaseOrder.create({
-          data: {
+      if (aquaTech) {
+        const secondPo = await prisma.purchaseOrder.findFirst({
+          where: {
             tenantId,
             orderNumber: `PO-${String(existingPoCount + 2).padStart(5, '0')}`,
-            status: PurchaseOrderStatus.ORDERED,
-            supplierName: 'Walk-in Local Vendor',
-            supplierPhone: '9000099999',
-            supplierEmail: 'local.vendor@example.com',
-            supplierGstNumber: '29QRSTU3456V7Z8',
-            subtotal: 1200,
-            taxAmount: 216,
-            totalAmount: 1416,
-            notes: 'Demo fallback PO using free-text supplier fields',
-            createdById: owner?.id,
-            items: {
-              create: [
-                {
-                  productId: starter3HpId,
-                  productName: PRODUCTS.find((p) => p.sku === 'STR-3HP-1P')?.name ?? '3HP Starter',
-                  quantity: 0.2,
-                  unitCost: 6000,
-                  lineTotal: 1200,
-                  receivedQuantity: 0,
-                },
-              ],
-            },
           },
+          select: { id: true },
         });
+
+        if (!secondPo) {
+          await prisma.purchaseOrder.create({
+            data: {
+              tenantId,
+              orderNumber: `PO-${String(existingPoCount + 2).padStart(5, '0')}`,
+              status: PurchaseOrderStatus.ORDERED,
+              supplierId: aquaTech.id,
+              supplierName: aquaTech.name,
+              supplierPhone: aquaTech.phone ?? undefined,
+              supplierEmail: aquaTech.email ?? undefined,
+              supplierGstNumber: aquaTech.gstNumber ?? undefined,
+              subtotal: 1200,
+              taxAmount: 216,
+              totalAmount: 1416,
+              notes: 'Demo secondary PO using supplier master linkage',
+              createdById: owner?.id,
+              items: {
+                create: [
+                  {
+                    productId: starter3HpId,
+                    productName: PRODUCTS.find((p) => p.sku === 'STR-3HP-1P')?.name ?? '3HP Starter',
+                    quantity: 0.2,
+                    unitCost: 6000,
+                    lineTotal: 1200,
+                    receivedQuantity: 0,
+                  },
+                ],
+              },
+            },
+          });
+        }
       }
     }
   }

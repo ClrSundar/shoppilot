@@ -9,6 +9,7 @@ describe('Commercial Guardrails E2E', () => {
   let accessToken: string;
   let customerId: string;
   let productId: string;
+  let supplierId: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -50,6 +51,19 @@ describe('Commercial Guardrails E2E', () => {
 
     customerId = customersResponse.body[0].id;
     productId = productsResponse.body[0].id;
+
+    const supplierResponse = await request(app.getHttpServer())
+      .post('/api/suppliers')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        name: `Guardrail Supplier ${Date.now()}`,
+        phone: '9000012345',
+        email: 'guardrail.supplier@example.com',
+        gstNumber: '29ABCDE1234F2Z5',
+      })
+      .expect(201);
+
+    supplierId = supplierResponse.body.id;
   });
 
   afterAll(async () => {
@@ -143,7 +157,7 @@ describe('Commercial Guardrails E2E', () => {
       .post('/api/purchases')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
-        supplierName: 'Guardrail Supplier',
+        supplierId,
         items: [
           {
             productId,
@@ -187,7 +201,7 @@ describe('Commercial Guardrails E2E', () => {
       .post('/api/purchases')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({
-        supplierName: 'Transition Guardrail Supplier',
+        supplierId,
         items: [
           {
             productId,

@@ -45,34 +45,16 @@ export class PurchasesService {
   }
 
   async create(tenantId: string, userId: string, dto: CreatePurchaseOrderDto) {
-    let supplierId: string | undefined;
-    let supplierName = dto.supplierName;
-    let supplierPhone = dto.supplierPhone;
-    let supplierEmail = dto.supplierEmail;
-    let supplierGstNumber = dto.supplierGstNumber;
+    const supplier = await this.prisma.supplier.findFirst({
+      where: {
+        id: dto.supplierId,
+        tenantId,
+        active: true,
+      },
+    });
 
-    if (dto.supplierId) {
-      const supplier = await this.prisma.supplier.findFirst({
-        where: {
-          id: dto.supplierId,
-          tenantId,
-          active: true,
-        },
-      });
-
-      if (!supplier) {
-        throw new BadRequestException('Supplier not found');
-      }
-
-      supplierId = supplier.id;
-      supplierName = supplier.name;
-      supplierPhone = supplier.phone ?? undefined;
-      supplierEmail = supplier.email ?? undefined;
-      supplierGstNumber = supplier.gstNumber ?? undefined;
-    }
-
-    if (!supplierName) {
-      throw new BadRequestException('supplierName is required when supplierId is not provided');
+    if (!supplier) {
+      throw new BadRequestException('Supplier not found');
     }
 
     const products = await this.prisma.product.findMany({
@@ -110,13 +92,13 @@ export class PurchasesService {
     return this.prisma.purchaseOrder.create({
       data: {
         tenantId,
-        supplierId,
+        supplierId: supplier.id,
         orderNumber,
         status: PurchaseOrderStatus.ORDERED,
-        supplierName,
-        supplierPhone,
-        supplierEmail,
-        supplierGstNumber,
+        supplierName: supplier.name,
+        supplierPhone: supplier.phone ?? undefined,
+        supplierEmail: supplier.email ?? undefined,
+        supplierGstNumber: supplier.gstNumber ?? undefined,
         expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : undefined,
         notes: dto.notes,
         subtotal: new Prisma.Decimal(subtotal),

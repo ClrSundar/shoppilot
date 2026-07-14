@@ -31,7 +31,6 @@ export default function PurchasesPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [supplierId, setSupplierId] = useState('');
-  const [supplierName, setSupplierName] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [unitCost, setUnitCost] = useState('0');
@@ -59,7 +58,6 @@ export default function PurchasesPage() {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
       setDialogOpen(false);
       setSupplierId('');
-      setSupplierName('');
       setProductId('');
       setQuantity('1');
       setUnitCost('0');
@@ -127,11 +125,8 @@ export default function PurchasesPage() {
   );
 
   const handleCreate = () => {
-    const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
-
     createMutation.mutate({
-      supplierId: supplierId || undefined,
-      supplierName: selectedSupplier ? undefined : supplierName,
+      supplierId,
       taxPercentage: Number(taxPercentage),
       notes: notes || undefined,
       items: [
@@ -173,26 +168,18 @@ export default function PurchasesPage() {
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
               select
-              label="Supplier (Optional)"
+              label="Supplier"
               value={supplierId}
               onChange={(e) => setSupplierId(e.target.value)}
               fullWidth
             >
-              <MenuItem value="">Use free text supplier</MenuItem>
+              <MenuItem value="">Select supplier</MenuItem>
               {suppliers.map((supplier) => (
                 <MenuItem key={supplier.id} value={supplier.id}>
                   {supplier.name}
                 </MenuItem>
               ))}
             </TextField>
-
-            <TextField
-              label="Supplier Name"
-              value={supplierName}
-              onChange={(e) => setSupplierName(e.target.value)}
-              fullWidth
-              disabled={Boolean(supplierId)}
-            />
 
             <TextField
               select
@@ -248,7 +235,7 @@ export default function PurchasesPage() {
           <Button
             variant="contained"
             onClick={handleCreate}
-            disabled={(!supplierId && !supplierName) || !productId || createMutation.isPending}
+            disabled={!supplierId || !productId || createMutation.isPending}
           >
             Save
           </Button>
