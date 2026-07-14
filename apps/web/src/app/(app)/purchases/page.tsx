@@ -19,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppToast } from '@/components/common/AppToast';
 import { useAppToast } from '@/hooks/use-app-toast';
 import { productsService } from '@/services/products.service';
+import { suppliersService } from '@/services/suppliers.service';
 import {
   PurchaseOrder,
   purchasesService,
@@ -29,6 +30,7 @@ export default function PurchasesPage() {
   const { toast, showToast, closeToast } = useAppToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [supplierId, setSupplierId] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('1');
@@ -46,11 +48,17 @@ export default function PurchasesPage() {
     queryFn: productsService.getAll,
   });
 
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['suppliers'],
+    queryFn: suppliersService.getAll,
+  });
+
   const createMutation = useMutation({
     mutationFn: purchasesService.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
       setDialogOpen(false);
+      setSupplierId('');
       setSupplierName('');
       setProductId('');
       setQuantity('1');
@@ -119,8 +127,11 @@ export default function PurchasesPage() {
   );
 
   const handleCreate = () => {
+    const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+
     createMutation.mutate({
-      supplierName,
+      supplierId: supplierId || undefined,
+      supplierName: selectedSupplier ? undefined : supplierName,
       taxPercentage: Number(taxPercentage),
       notes: notes || undefined,
       items: [
@@ -161,10 +172,26 @@ export default function PurchasesPage() {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
+              select
+              label="Supplier (Optional)"
+              value={supplierId}
+              onChange={(e) => setSupplierId(e.target.value)}
+              fullWidth
+            >
+              <MenuItem value="">Use free text supplier</MenuItem>
+              {suppliers.map((supplier) => (
+                <MenuItem key={supplier.id} value={supplier.id}>
+                  {supplier.name}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
               label="Supplier Name"
               value={supplierName}
               onChange={(e) => setSupplierName(e.target.value)}
               fullWidth
+              disabled={Boolean(supplierId)}
             />
 
             <TextField
@@ -221,7 +248,7 @@ export default function PurchasesPage() {
           <Button
             variant="contained"
             onClick={handleCreate}
-            disabled={!supplierName || !productId || createMutation.isPending}
+            disabled={(!supplierId && !supplierName) || !productId || createMutation.isPending}
           >
             Save
           </Button>

@@ -10,23 +10,32 @@ import {
   Matches,
   Max,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
 import { CreatePurchaseItemDto } from './create-purchase-item.dto';
 
 export class CreatePurchaseOrderDto {
-  @IsString()
-  supplierName: string;
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string;
 
+  @ValidateIf((o) => !o.supplierId)
+  @IsString()
+  supplierName?: string;
+
+  @ValidateIf((o) => !o.supplierId)
   @IsOptional()
   @IsString()
   supplierPhone?: string;
 
+  @ValidateIf((o) => !o.supplierId)
   @IsOptional()
   @IsEmail()
   supplierEmail?: string;
 
+  @ValidateIf((o) => !o.supplierId)
   @IsOptional()
   @IsString()
   @Matches(/^[0-9A-Z]{15}$/)

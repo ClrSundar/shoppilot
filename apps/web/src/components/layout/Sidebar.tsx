@@ -16,6 +16,7 @@ const navigationItems = [
   { href: '/products', label: 'Products', icon: '▦' },
   { href: '/inventory', label: 'Inventory', icon: '◌' },
   { href: '/customers', label: 'Customers', icon: '☺' },
+  { href: '/suppliers', label: 'Suppliers', icon: 'SV' },
   { href: '/agents', label: 'Agents', icon: '♢' },
   { href: '/settings/agent-types', label: 'Agent Types', icon: '⚙' },
   { href: '/quotes', label: 'Quotes', icon: '✎' },
@@ -69,6 +70,8 @@ export function Sidebar({ isMobileOpen, onNavigate, onClose }: SidebarProps) {
           ...sidebarShellStyle,
           position: 'fixed',
           inset: 0,
+          height: '100dvh',
+          overflow: 'hidden',
           zIndex: 40,
           transform: isMobileOpen ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform 220ms ease',
@@ -116,6 +119,8 @@ function SidebarContent({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
         gap: 20,
       }}
     >

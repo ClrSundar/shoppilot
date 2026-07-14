@@ -45,6 +45,36 @@ export class PurchasesService {
   }
 
   async create(tenantId: string, userId: string, dto: CreatePurchaseOrderDto) {
+    let supplierId: string | undefined;
+    let supplierName = dto.supplierName;
+    let supplierPhone = dto.supplierPhone;
+    let supplierEmail = dto.supplierEmail;
+    let supplierGstNumber = dto.supplierGstNumber;
+
+    if (dto.supplierId) {
+      const supplier = await this.prisma.supplier.findFirst({
+        where: {
+          id: dto.supplierId,
+          tenantId,
+          active: true,
+        },
+      });
+
+      if (!supplier) {
+        throw new BadRequestException('Supplier not found');
+      }
+
+      supplierId = supplier.id;
+      supplierName = supplier.name;
+      supplierPhone = supplier.phone ?? undefined;
+      supplierEmail = supplier.email ?? undefined;
+      supplierGstNumber = supplier.gstNumber ?? undefined;
+    }
+
+    if (!supplierName) {
+      throw new BadRequestException('supplierName is required when supplierId is not provided');
+    }
+
     const products = await this.prisma.product.findMany({
       where: {
         tenantId,
@@ -80,12 +110,13 @@ export class PurchasesService {
     return this.prisma.purchaseOrder.create({
       data: {
         tenantId,
+        supplierId,
         orderNumber,
         status: PurchaseOrderStatus.ORDERED,
-        supplierName: dto.supplierName,
-        supplierPhone: dto.supplierPhone,
-        supplierEmail: dto.supplierEmail,
-        supplierGstNumber: dto.supplierGstNumber,
+        supplierName,
+        supplierPhone,
+        supplierEmail,
+        supplierGstNumber,
         expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : undefined,
         notes: dto.notes,
         subtotal: new Prisma.Decimal(subtotal),
@@ -109,6 +140,7 @@ export class PurchasesService {
       },
       include: {
         items: true,
+        supplier: true,
       },
     });
   }
@@ -118,6 +150,7 @@ export class PurchasesService {
       where: { tenantId },
       include: {
         items: true,
+        supplier: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -133,6 +166,7 @@ export class PurchasesService {
       },
       include: {
         items: true,
+        supplier: true,
       },
     });
 
@@ -191,6 +225,7 @@ export class PurchasesService {
       },
       include: {
         items: true,
+        supplier: true,
       },
     });
   }
@@ -209,6 +244,7 @@ export class PurchasesService {
         },
         include: {
           items: true,
+          supplier: true,
         },
       });
 

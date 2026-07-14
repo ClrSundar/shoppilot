@@ -24,6 +24,7 @@ import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.
 import { PurchasesModule } from './modules/purchases/purchases.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ReturnsModule } from './modules/returns/returns.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { ReturnsModule } from './modules/returns/returns.module';
     PurchasesModule,
     PaymentsModule,
     ReturnsModule,
+    SuppliersModule,
   ],
   providers: [
     {

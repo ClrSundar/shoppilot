@@ -989,6 +989,68 @@ async function seedCommercialData(
     where: { tenantId },
   });
 
+  const supplierSeeds = [
+    {
+      name: 'South Pump Distributors',
+      phone: '9000011111',
+      email: 'sales@southpump.example',
+      gstNumber: '29ABCDE1234F2Z5',
+      address: 'Market Yard, Bengaluru',
+    },
+    {
+      name: 'Aqua Tech Wholesale',
+      phone: '9000011112',
+      email: 'orders@aquatech.example',
+      gstNumber: '29FGHIJ5678K1Z2',
+      address: 'Industrial Layout, Mysuru',
+    },
+    {
+      name: 'Prime Electricals Supply',
+      phone: '9000011113',
+      email: 'prime@electricals.example',
+      gstNumber: '29LMNOP9012Q3Z4',
+      address: 'SP Road, Bengaluru',
+    },
+  ];
+
+  const supplierByName = new Map<string, { id: string; name: string; phone: string | null; email: string | null; gstNumber: string | null }>();
+
+  for (const seed of supplierSeeds) {
+    const supplier = await prisma.supplier.upsert({
+      where: {
+        tenantId_name: {
+          tenantId,
+          name: seed.name,
+        },
+      },
+      update: {
+        phone: seed.phone,
+        email: seed.email,
+        gstNumber: seed.gstNumber,
+        address: seed.address,
+        active: true,
+      },
+      create: {
+        tenantId,
+        name: seed.name,
+        phone: seed.phone,
+        email: seed.email,
+        gstNumber: seed.gstNumber,
+        address: seed.address,
+        active: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        gstNumber: true,
+      },
+    });
+
+    supplierByName.set(supplier.name, supplier);
+  }
+
   let demoPurchaseOrder = await prisma.purchaseOrder.findFirst({
     where: {
       tenantId,
@@ -1026,20 +1088,22 @@ async function seedCommercialData(
       const subtotal = poItems.reduce((sum, item) => sum + item.quantity * item.unitCost, 0);
       const taxAmount = Number((subtotal * 0.18).toFixed(2));
       const totalAmount = Number((subtotal + taxAmount).toFixed(2));
+      const southPump = supplierByName.get('South Pump Distributors');
 
       demoPurchaseOrder = await prisma.purchaseOrder.create({
         data: {
           tenantId,
           orderNumber: `PO-${String(existingPoCount + 1).padStart(5, '0')}`,
           status: PurchaseOrderStatus.ORDERED,
-          supplierName: 'South Pump Distributors',
-          supplierPhone: '9000011111',
-          supplierEmail: 'sales@southpump.example',
-          supplierGstNumber: '29ABCDE1234F2Z5',
+          supplierId: southPump?.id,
+          supplierName: southPump?.name ?? 'South Pump Distributors',
+          supplierPhone: southPump?.phone ?? '9000011111',
+          supplierEmail: southPump?.email ?? 'sales@southpump.example',
+          supplierGstNumber: southPump?.gstNumber ?? '29ABCDE1234F2Z5',
           subtotal,
           taxAmount,
           totalAmount,
-          notes: 'Demo PO for newly added commercial flow module',
+          notes: 'Demo PO using supplier master linkage',
           createdById: owner?.id,
           items: {
             create: poItems.map((item) => ({
@@ -1058,6 +1122,45 @@ async function seedCommercialData(
           totalAmount: true,
         },
       });
+
+      const fallbackPo = await prisma.purchaseOrder.findFirst({
+        where: {
+          tenantId,
+          orderNumber: `PO-${String(existingPoCount + 2).padStart(5, '0')}`,
+        },
+        select: { id: true },
+      });
+
+      if (!fallbackPo) {
+        await prisma.purchaseOrder.create({
+          data: {
+            tenantId,
+            orderNumber: `PO-${String(existingPoCount + 2).padStart(5, '0')}`,
+            status: PurchaseOrderStatus.ORDERED,
+            supplierName: 'Walk-in Local Vendor',
+            supplierPhone: '9000099999',
+            supplierEmail: 'local.vendor@example.com',
+            supplierGstNumber: '29QRSTU3456V7Z8',
+            subtotal: 1200,
+            taxAmount: 216,
+            totalAmount: 1416,
+            notes: 'Demo fallback PO using free-text supplier fields',
+            createdById: owner?.id,
+            items: {
+              create: [
+                {
+                  productId: starter3HpId,
+                  productName: PRODUCTS.find((p) => p.sku === 'STR-3HP-1P')?.name ?? '3HP Starter',
+                  quantity: 0.2,
+                  unitCost: 6000,
+                  lineTotal: 1200,
+                  receivedQuantity: 0,
+                },
+              ],
+            },
+          },
+        });
+      }
     }
   }
 
@@ -1199,7 +1302,7 @@ async function seedCommercialData(
     }
   }
 
-  console.log('  ✅ Demo purchases, payments, and returns seeded');
+  console.log('  ✅ Demo purchases, payments, returns, and suppliers seeded');
 }
 
 // ============================================================================

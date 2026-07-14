@@ -11,10 +11,18 @@ export type PurchaseOrder = {
   id: string;
   orderNumber: string;
   status: PurchaseOrderStatus;
+  supplierId?: string | null;
   supplierName: string;
   supplierPhone?: string | null;
   supplierEmail?: string | null;
   supplierGstNumber?: string | null;
+  supplier?: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+    gstNumber?: string | null;
+  } | null;
   subtotal: string;
   taxAmount: string;
   totalAmount: string;
@@ -34,7 +42,8 @@ export type PurchaseOrder = {
 };
 
 export type CreatePurchaseOrderPayload = {
-  supplierName: string;
+  supplierId?: string;
+  supplierName?: string;
   supplierPhone?: string;
   supplierEmail?: string;
   supplierGstNumber?: string;
