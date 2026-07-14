@@ -18,6 +18,24 @@ import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 export class PurchasesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly allowedStatusTransitions: Record<
+    PurchaseOrderStatus,
+    PurchaseOrderStatus[]
+  > = {
+    DRAFT: [PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.CANCELLED],
+    ORDERED: [
+      PurchaseOrderStatus.PARTIALLY_RECEIVED,
+      PurchaseOrderStatus.RECEIVED,
+      PurchaseOrderStatus.CANCELLED,
+    ],
+    PARTIALLY_RECEIVED: [
+      PurchaseOrderStatus.RECEIVED,
+      PurchaseOrderStatus.CANCELLED,
+    ],
+    RECEIVED: [],
+    CANCELLED: [],
+  };
+
   private async generateOrderNumber(tenantId: string) {
     const count = await this.prisma.purchaseOrder.count({
       where: { tenantId },
@@ -130,7 +148,40 @@ export class PurchasesService {
     id: string,
     status: PurchaseOrderStatus,
   ) {
-    await this.findOne(tenantId, id);
+    const purchaseOrder = await this.findOne(tenantId, id);
+
+    if (purchaseOrder.status === status) {
+      return purchaseOrder;
+    }
+
+    const allowed = this.allowedStatusTransitions[purchaseOrder.status];
+
+    if (!allowed.includes(status)) {
+      throw new BadRequestException(
+        `Invalid purchase order status transition from ${purchaseOrder.status} to ${status}`,
+      );
+    }
+
+    if (status === PurchaseOrderStatus.RECEIVED) {
+      const allReceived = purchaseOrder.items.every(
+        (item) => Number(item.receivedQuantity) >= Number(item.quantity),
+      );
+
+      if (!allReceived) {
+        throw new BadRequestException(
+          'Cannot mark as RECEIVED until all line items are fully received',
+        );
+      }
+    }
+
+    if (
+      status === PurchaseOrderStatus.CANCELLED &&
+      purchaseOrder.items.some((item) => Number(item.receivedQuantity) > 0)
+    ) {
+      throw new BadRequestException(
+        'Cannot cancel a purchase order that has already received quantities',
+      );
+    }
 
     return this.prisma.purchaseOrder.update({
       where: { id },

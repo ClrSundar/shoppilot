@@ -6,6 +6,12 @@ import {
   DecisionRuleStatus,
   RecommendationAction,
   RecommendationRunStatus,
+  PaymentDirection,
+  PaymentMethod,
+  PaymentStatus,
+  ProductReturnStatus,
+  ProductReturnType,
+  PurchaseOrderStatus,
   UserRole,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -381,6 +387,11 @@ async function clearData() {
   console.log('🗑️  Clearing existing decision + product data...');
 
   // Child tables first to respect FK constraints
+  await prisma.productReturnItem.deleteMany();
+  await prisma.productReturn.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.purchaseOrderItem.deleteMany();
+  await prisma.purchaseOrder.deleteMany();
   await prisma.recommendationFeedback.deleteMany();
   await prisma.recommendationCandidate.deleteMany();
   await prisma.recommendationRun.deleteMany();
@@ -935,6 +946,263 @@ async function seedDemoPilotData(
 }
 
 // ============================================================================
+// STEP 8 — COMMERCIAL DATA (purchase orders, payments, returns)
+// ============================================================================
+
+async function seedCommercialData(
+  tenantId: string,
+  skuMap: Record<string, string>,
+) {
+  console.log('\n💼 Seeding purchases, payments, and returns...');
+
+  const owner = await prisma.user.findFirst({
+    where: {
+      tenantId,
+      email: 'owner@demo.com',
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  const firstCustomer = await prisma.customer.findFirst({
+    where: { tenantId, active: true },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  const firstQuote = await prisma.quote.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      quoteNumber: true,
+      customerId: true,
+      totalAmount: true,
+    },
+  });
+
+  const existingPoCount = await prisma.purchaseOrder.count({
+    where: { tenantId },
+  });
+
+  let demoPurchaseOrder = await prisma.purchaseOrder.findFirst({
+    where: {
+      tenantId,
+      orderNumber: 'PO-00001',
+    },
+    select: {
+      id: true,
+      orderNumber: true,
+      totalAmount: true,
+    },
+  });
+
+  if (!demoPurchaseOrder) {
+    const mot3HpId = skuMap['MOT-CRI-3HP-1P'];
+    const starter3HpId = skuMap['STR-3HP-1P'];
+
+    if (!mot3HpId || !starter3HpId) {
+      console.warn('  ⚠️  Skipping PO seed: required demo products not found');
+    } else {
+      const poItems = [
+        {
+          productId: mot3HpId,
+          productName: PRODUCTS.find((p) => p.sku === 'MOT-CRI-3HP-1P')?.name ?? '3HP Motor',
+          quantity: 2,
+          unitCost: 25500,
+        },
+        {
+          productId: starter3HpId,
+          productName: PRODUCTS.find((p) => p.sku === 'STR-3HP-1P')?.name ?? '3HP Starter',
+          quantity: 2,
+          unitCost: 3500,
+        },
+      ];
+
+      const subtotal = poItems.reduce((sum, item) => sum + item.quantity * item.unitCost, 0);
+      const taxAmount = Number((subtotal * 0.18).toFixed(2));
+      const totalAmount = Number((subtotal + taxAmount).toFixed(2));
+
+      demoPurchaseOrder = await prisma.purchaseOrder.create({
+        data: {
+          tenantId,
+          orderNumber: `PO-${String(existingPoCount + 1).padStart(5, '0')}`,
+          status: PurchaseOrderStatus.ORDERED,
+          supplierName: 'South Pump Distributors',
+          supplierPhone: '9000011111',
+          supplierEmail: 'sales@southpump.example',
+          supplierGstNumber: '29ABCDE1234F2Z5',
+          subtotal,
+          taxAmount,
+          totalAmount,
+          notes: 'Demo PO for newly added commercial flow module',
+          createdById: owner?.id,
+          items: {
+            create: poItems.map((item) => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitCost: item.unitCost,
+              lineTotal: Number((item.quantity * item.unitCost).toFixed(2)),
+              receivedQuantity: 0,
+            })),
+          },
+        },
+        select: {
+          id: true,
+          orderNumber: true,
+          totalAmount: true,
+        },
+      });
+    }
+  }
+
+  const existingPayments = await prisma.payment.count({ where: { tenantId } });
+
+  if (firstQuote) {
+    const existingQuotePayment = await prisma.payment.findFirst({
+      where: {
+        tenantId,
+        quoteId: firstQuote.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existingQuotePayment) {
+      await prisma.payment.create({
+        data: {
+          tenantId,
+          quoteId: firstQuote.id,
+          customerId: firstQuote.customerId,
+          amount: Number((Number(firstQuote.totalAmount) * 0.4).toFixed(2)),
+          direction: PaymentDirection.RECEIVED,
+          method: PaymentMethod.UPI,
+          status: PaymentStatus.COMPLETED,
+          referenceNumber: `RCPT-${String(existingPayments + 1).padStart(5, '0')}`,
+          note: `Demo advance received for ${firstQuote.quoteNumber}`,
+          createdById: owner?.id,
+        },
+      });
+    }
+  }
+
+  if (demoPurchaseOrder) {
+    const existingPoPayment = await prisma.payment.findFirst({
+      where: {
+        tenantId,
+        purchaseOrderId: demoPurchaseOrder.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existingPoPayment) {
+      await prisma.payment.create({
+        data: {
+          tenantId,
+          purchaseOrderId: demoPurchaseOrder.id,
+          amount: Number((Number(demoPurchaseOrder.totalAmount) * 0.5).toFixed(2)),
+          direction: PaymentDirection.PAID,
+          method: PaymentMethod.BANK_TRANSFER,
+          status: PaymentStatus.COMPLETED,
+          referenceNumber: `PMT-${String(existingPayments + 2).padStart(5, '0')}`,
+          note: `Demo supplier advance paid for ${demoPurchaseOrder.orderNumber}`,
+          createdById: owner?.id,
+        },
+      });
+    }
+  }
+
+  const ropeId = skuMap['ROP-NYLON'];
+  if (firstQuote && ropeId) {
+    const existingSalesReturn = await prisma.productReturn.findFirst({
+      where: {
+        tenantId,
+        quoteId: firstQuote.id,
+        type: ProductReturnType.SALES_RETURN,
+      },
+      select: { id: true },
+    });
+
+    if (!existingSalesReturn) {
+      await prisma.productReturn.create({
+        data: {
+          tenantId,
+          returnNumber: 'RT-00001',
+          type: ProductReturnType.SALES_RETURN,
+          status: ProductReturnStatus.REQUESTED,
+          quoteId: firstQuote.id,
+          customerId: firstQuote.customerId,
+          reason: 'Customer requested partial return of accessories',
+          notes: 'Demo sales return seeded for testing return workflow',
+          createdById: owner?.id,
+          items: {
+            create: [
+              {
+                productId: ropeId,
+                productName: PRODUCTS.find((p) => p.sku === 'ROP-NYLON')?.name ?? 'Nylon Safety Rope',
+                quantity: 5,
+                unitPrice: 18,
+                lineTotal: 90,
+                restockToInventory: true,
+              },
+            ],
+          },
+        },
+      });
+    }
+  }
+
+  if (demoPurchaseOrder) {
+    const existingPurchaseReturn = await prisma.productReturn.findFirst({
+      where: {
+        tenantId,
+        purchaseOrderId: demoPurchaseOrder.id,
+        type: ProductReturnType.PURCHASE_RETURN,
+      },
+      select: { id: true },
+    });
+
+    if (!existingPurchaseReturn) {
+      const starter3HpId = skuMap['STR-3HP-1P'];
+
+      if (starter3HpId) {
+        await prisma.productReturn.create({
+          data: {
+            tenantId,
+            returnNumber: 'RT-00002',
+            type: ProductReturnType.PURCHASE_RETURN,
+            status: ProductReturnStatus.REQUESTED,
+            purchaseOrderId: demoPurchaseOrder.id,
+            customerId: firstCustomer?.id,
+            reason: 'Damaged item from supplier shipment',
+            notes: 'Demo purchase return seeded for approval/completion testing',
+            createdById: owner?.id,
+            items: {
+              create: [
+                {
+                  productId: starter3HpId,
+                  productName: PRODUCTS.find((p) => p.sku === 'STR-3HP-1P')?.name ?? '3HP Starter',
+                  quantity: 1,
+                  unitPrice: 3500,
+                  lineTotal: 3500,
+                  restockToInventory: false,
+                },
+              ],
+            },
+          },
+        });
+      }
+    }
+  }
+
+  console.log('  ✅ Demo purchases, payments, and returns seeded');
+}
+
+// ============================================================================
 // ORCHESTRATOR
 // ============================================================================
 
@@ -951,6 +1219,7 @@ async function runAllSeeds() {
     const templateMap = await seedSolutionTemplates(tenant.id, skuMap);
     await seedDecisionRules(templateMap);
     await seedDemoPilotData(tenant.id, skuMap);
+    await seedCommercialData(tenant.id, skuMap);
 
     console.log('\n✨ All seeds completed successfully!');
     console.log(`\n📊 Summary:`);

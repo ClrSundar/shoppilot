@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PaymentDirection, Prisma } from '@prisma/client';
+import { PaymentDirection, PaymentStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -17,9 +17,18 @@ export class PaymentsService {
     let linkedPurchaseOrderId = dto.purchaseOrderId;
     let linkedCustomerId = dto.customerId;
 
+    if (dto.quoteId && dto.purchaseOrderId) {
+      throw new BadRequestException(
+        'Payment can be linked to either quoteId or purchaseOrderId, not both',
+      );
+    }
+
     if (!dto.quoteId && !dto.purchaseOrderId) {
       throw new BadRequestException('Either quoteId or purchaseOrderId is required');
     }
+
+    let quoteTotalAmount: number | null = null;
+    let purchaseOrderTotalAmount: number | null = null;
 
     if (dto.quoteId) {
       const quote = await this.prisma.quote.findFirst({
@@ -30,6 +39,7 @@ export class PaymentsService {
         select: {
           id: true,
           customerId: true,
+          totalAmount: true,
         },
       });
 
@@ -39,6 +49,7 @@ export class PaymentsService {
 
       linkedQuoteId = quote.id;
       linkedCustomerId = linkedCustomerId ?? quote.customerId;
+      quoteTotalAmount = Number(quote.totalAmount);
     }
 
     if (dto.purchaseOrderId) {
@@ -49,6 +60,7 @@ export class PaymentsService {
         },
         select: {
           id: true,
+          totalAmount: true,
         },
       });
 
@@ -57,6 +69,7 @@ export class PaymentsService {
       }
 
       linkedPurchaseOrderId = purchaseOrder.id;
+      purchaseOrderTotalAmount = Number(purchaseOrder.totalAmount);
     }
 
     if (linkedCustomerId) {
@@ -79,13 +92,73 @@ export class PaymentsService {
       dto.direction ??
       (linkedQuoteId ? PaymentDirection.RECEIVED : PaymentDirection.PAID);
 
+    if (linkedQuoteId && direction !== PaymentDirection.RECEIVED) {
+      throw new BadRequestException('Quote payments must use RECEIVED direction');
+    }
+
+    if (linkedPurchaseOrderId && direction !== PaymentDirection.PAID) {
+      throw new BadRequestException('Purchase order payments must use PAID direction');
+    }
+
+    const amount = Number(dto.amount);
+
+    if (linkedQuoteId && quoteTotalAmount !== null) {
+      const aggregate = await this.prisma.payment.aggregate({
+        where: {
+          tenantId,
+          quoteId: linkedQuoteId,
+          direction: PaymentDirection.RECEIVED,
+          status: {
+            in: [PaymentStatus.PENDING, PaymentStatus.COMPLETED],
+          },
+        },
+        _sum: {
+          amount: true,
+        },
+      });
+
+      const existingAmount = Number(aggregate._sum.amount ?? 0);
+      const nextAmount = existingAmount + amount;
+
+      if (nextAmount > quoteTotalAmount) {
+        throw new BadRequestException(
+          `Payment exceeds quote balance. Current tracked amount ${existingAmount.toFixed(2)}, quote total ${quoteTotalAmount.toFixed(2)}`,
+        );
+      }
+    }
+
+    if (linkedPurchaseOrderId && purchaseOrderTotalAmount !== null) {
+      const aggregate = await this.prisma.payment.aggregate({
+        where: {
+          tenantId,
+          purchaseOrderId: linkedPurchaseOrderId,
+          direction: PaymentDirection.PAID,
+          status: {
+            in: [PaymentStatus.PENDING, PaymentStatus.COMPLETED],
+          },
+        },
+        _sum: {
+          amount: true,
+        },
+      });
+
+      const existingAmount = Number(aggregate._sum.amount ?? 0);
+      const nextAmount = existingAmount + amount;
+
+      if (nextAmount > purchaseOrderTotalAmount) {
+        throw new BadRequestException(
+          `Payment exceeds purchase order balance. Current tracked amount ${existingAmount.toFixed(2)}, PO total ${purchaseOrderTotalAmount.toFixed(2)}`,
+        );
+      }
+    }
+
     return this.prisma.payment.create({
       data: {
         tenantId,
         quoteId: linkedQuoteId,
         purchaseOrderId: linkedPurchaseOrderId,
         customerId: linkedCustomerId,
-        amount: new Prisma.Decimal(dto.amount),
+        amount: new Prisma.Decimal(amount),
         direction,
         method: dto.method,
         status: dto.status,

@@ -18,6 +18,16 @@ import { CreateProductReturnDto } from './dto/create-product-return.dto';
 export class ReturnsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly allowedStatusTransitions: Record<
+    ProductReturnStatus,
+    ProductReturnStatus[]
+  > = {
+    REQUESTED: [ProductReturnStatus.APPROVED, ProductReturnStatus.REJECTED],
+    APPROVED: [ProductReturnStatus.COMPLETED, ProductReturnStatus.REJECTED],
+    REJECTED: [],
+    COMPLETED: [],
+  };
+
   private async generateReturnNumber(tenantId: string) {
     const count = await this.prisma.productReturn.count({
       where: { tenantId },
@@ -44,6 +54,12 @@ export class ReturnsService {
         select: {
           id: true,
           customerId: true,
+          items: {
+            select: {
+              productId: true,
+              quantity: true,
+            },
+          },
         },
       });
 
@@ -52,6 +68,62 @@ export class ReturnsService {
       }
 
       dto.customerId = dto.customerId ?? quote.customerId;
+
+      const soldQtyByProduct = new Map<string, number>();
+
+      for (const quoteItem of quote.items) {
+        const current = soldQtyByProduct.get(quoteItem.productId) ?? 0;
+        soldQtyByProduct.set(
+          quoteItem.productId,
+          current + Number(quoteItem.quantity),
+        );
+      }
+
+      const priorReturns = await this.prisma.productReturnItem.findMany({
+        where: {
+          productReturn: {
+            tenantId,
+            quoteId: quote.id,
+            type: ProductReturnType.SALES_RETURN,
+            status: {
+              not: ProductReturnStatus.REJECTED,
+            },
+          },
+        },
+        select: {
+          productId: true,
+          quantity: true,
+        },
+      });
+
+      const returnedQtyByProduct = new Map<string, number>();
+
+      for (const priorReturn of priorReturns) {
+        const current = returnedQtyByProduct.get(priorReturn.productId) ?? 0;
+        returnedQtyByProduct.set(
+          priorReturn.productId,
+          current + Number(priorReturn.quantity),
+        );
+      }
+
+      for (const item of dto.items) {
+        const soldQty = soldQtyByProduct.get(item.productId) ?? 0;
+
+        if (soldQty <= 0) {
+          throw new BadRequestException(
+            `Product is not present in source quote: ${item.productId}`,
+          );
+        }
+
+        const existingReturned = returnedQtyByProduct.get(item.productId) ?? 0;
+        const nextReturned = existingReturned + item.quantity;
+
+        if (nextReturned > soldQty) {
+          throw new BadRequestException(
+            `Return quantity exceeds sold quantity for product ${item.productId}`,
+          );
+        }
+      }
     }
 
     if (dto.purchaseOrderId) {
@@ -60,11 +132,75 @@ export class ReturnsService {
           id: dto.purchaseOrderId,
           tenantId,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          items: {
+            select: {
+              productId: true,
+              receivedQuantity: true,
+            },
+          },
+        },
       });
 
       if (!purchaseOrder) {
         throw new BadRequestException('Purchase order not found');
+      }
+
+      const receivedQtyByProduct = new Map<string, number>();
+
+      for (const poItem of purchaseOrder.items) {
+        const current = receivedQtyByProduct.get(poItem.productId) ?? 0;
+        receivedQtyByProduct.set(
+          poItem.productId,
+          current + Number(poItem.receivedQuantity),
+        );
+      }
+
+      const priorReturns = await this.prisma.productReturnItem.findMany({
+        where: {
+          productReturn: {
+            tenantId,
+            purchaseOrderId: purchaseOrder.id,
+            type: ProductReturnType.PURCHASE_RETURN,
+            status: {
+              not: ProductReturnStatus.REJECTED,
+            },
+          },
+        },
+        select: {
+          productId: true,
+          quantity: true,
+        },
+      });
+
+      const returnedQtyByProduct = new Map<string, number>();
+
+      for (const priorReturn of priorReturns) {
+        const current = returnedQtyByProduct.get(priorReturn.productId) ?? 0;
+        returnedQtyByProduct.set(
+          priorReturn.productId,
+          current + Number(priorReturn.quantity),
+        );
+      }
+
+      for (const item of dto.items) {
+        const receivedQty = receivedQtyByProduct.get(item.productId) ?? 0;
+
+        if (receivedQty <= 0) {
+          throw new BadRequestException(
+            `Product has no received quantity in source PO: ${item.productId}`,
+          );
+        }
+
+        const existingReturned = returnedQtyByProduct.get(item.productId) ?? 0;
+        const nextReturned = existingReturned + item.quantity;
+
+        if (nextReturned > receivedQty) {
+          throw new BadRequestException(
+            `Return quantity exceeds received quantity for product ${item.productId}`,
+          );
+        }
       }
     }
 
@@ -190,11 +326,32 @@ export class ReturnsService {
         throw new NotFoundException('Return not found');
       }
 
+      if (productReturn.status === status) {
+        return productReturn;
+      }
+
+      const allowed = this.allowedStatusTransitions[productReturn.status];
+
+      if (!allowed.includes(status)) {
+        throw new BadRequestException(
+          `Invalid return status transition from ${productReturn.status} to ${status}`,
+        );
+      }
+
       if (
         productReturn.status === ProductReturnStatus.COMPLETED &&
         status === ProductReturnStatus.COMPLETED
       ) {
         throw new BadRequestException('Return already completed');
+      }
+
+      if (
+        status === ProductReturnStatus.COMPLETED &&
+        productReturn.status !== ProductReturnStatus.APPROVED
+      ) {
+        throw new BadRequestException(
+          'Only APPROVED returns can be moved to COMPLETED',
+        );
       }
 
       if (status === ProductReturnStatus.COMPLETED) {
