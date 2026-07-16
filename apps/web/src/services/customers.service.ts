@@ -8,7 +8,19 @@ export type Customer = {
   email?: string | null;
   address?: string | null;
   gstNumber?: string | null;
+  customerTypeId?: string | null;
   active: boolean;
+};
+
+export type CustomerType = {
+  id: string;
+  code: string;
+  name: string;
+  defaultDiscountPercentage: string | number;
+  active: boolean;
+  _count?: {
+    customers: number;
+  };
 };
 
 export type CustomerLedgerSummary = {
@@ -24,7 +36,17 @@ export type CreateCustomerPayload = {
   email?: string;
   address?: string;
   gstNumber?: string;
+  customerTypeId?: string;
 };
+
+export type CreateCustomerTypePayload = {
+  code: string;
+  name: string;
+  defaultDiscountPercentage: number;
+  active?: boolean;
+};
+
+export type UpdateCustomerTypePayload = Partial<CreateCustomerTypePayload>;
 
 export type BulkUploadResult = {
   totalRows: number;
@@ -46,6 +68,26 @@ export const customersService = {
 
   create: async (payload: CreateCustomerPayload) => {
     const res = await api.post<Customer>('/customers', payload);
+    return res.data;
+  },
+
+  getCustomerTypes: async () => {
+    const res = await api.get<CustomerType[]>('/customer-types');
+    return res.data;
+  },
+
+  createCustomerType: async (payload: CreateCustomerTypePayload) => {
+    const res = await api.post<CustomerType>('/customer-types', payload);
+    return res.data;
+  },
+
+  updateCustomerType: async (id: string, payload: UpdateCustomerTypePayload) => {
+    const res = await api.put<CustomerType>(`/customer-types/${id}`, payload);
+    return res.data;
+  },
+
+  deleteCustomerType: async (id: string) => {
+    const res = await api.delete<CustomerType>(`/customer-types/${id}`);
     return res.data;
   },
 

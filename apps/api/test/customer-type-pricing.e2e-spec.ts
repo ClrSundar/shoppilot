@@ -84,6 +84,32 @@ describe('Customer Type Pricing E2E', () => {
     };
   };
 
+  it('validates API/PricingService behavior only (no web payload assumptions)', async () => {
+    const { customer } = await setupCustomerTypeAndCustomer(
+      'API Scope',
+      'API_SCOPE',
+      10,
+    );
+
+    const quoteResponse = await request(app.getHttpServer())
+      .post('/api/quotes')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        customerId: customer.id,
+        items: [
+          {
+            productId,
+            quantity: 1,
+            unitPrice: baseUnitPrice,
+          },
+        ],
+      })
+      .expect(201);
+
+    const discountAmount = Number(quoteResponse.body.discountAmount);
+    expect(discountAmount).toBeCloseTo(Number((baseUnitPrice * 0.1).toFixed(2)), 2);
+  });
+
   it('applies Retail default discount 0%', async () => {
     const { customer } = await setupCustomerTypeAndCustomer('Retail', 'RETAIL', 0);
 
