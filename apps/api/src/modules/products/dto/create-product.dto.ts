@@ -55,5 +55,13 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  taxClassificationCode?: string;
+
+  @IsOptional()
+  @IsString()
+  taxClassificationLabel?: string;
+
+  @IsOptional()
+  @IsString()
   imageUrl?: string;
 }

@@ -29,6 +29,14 @@ export type QuoteItemPricingSnapshot = {
   discountAmount: number;
   netUnitPrice: number;
   lineTotal: number;
+  taxClassificationCode: string | null;
+  gstRateApplied: number;
+  taxableAmount: number;
+  taxAmount: number;
+  igstAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  appliedTaxType: 'NONE' | 'IGST' | 'CGST_SGST' | 'MIXED';
   discountReason?: string;
 };
 
@@ -42,7 +50,14 @@ export type QuotePricingResult = {
   orderDiscountAmount: number;
   taxableAmount: number;
   taxAmount: number;
+  taxPercentage: number;
+  igstAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
   totalAmount: number;
+  sellerStateCode: string | null;
+  customerBillingStateCode: string | null;
+  placeOfSupplyStateCode: string | null;
   totalDiscountAmount: number;
   pendingApprovals: PendingPriceOverrideApproval[];
   metadata: Record<string, unknown>;
@@ -55,5 +70,6 @@ export type QuotePricingInput = Pick<
   | 'orderDiscountType'
   | 'orderDiscountValue'
   | 'discountPercentage'
+  | 'placeOfSupplyStateCode'
   | 'notes'
 >;

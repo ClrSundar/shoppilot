@@ -11,8 +11,20 @@ import {
   defaultAgentDiscountByCategory,
 } from './agent-discount-config.constants';
 import { UpdateAgentDiscountConfigDto } from './dto/update-agent-discount-config.dto';
+import { UpdateGstConfigDto } from './dto/update-gst-config.dto';
 
 type AgentDiscountMap = Record<AgentDiscountCategory, number>;
+
+type TenantGstRateConfig = {
+  classificationCode: string;
+  ratePercentage: number;
+};
+
+type TenantGstConfig = {
+  sellerGstin?: string;
+  sellerStateCode?: string;
+  rates: TenantGstRateConfig[];
+};
 
 @Injectable()
 export class TenantSettingsService {
@@ -83,5 +95,103 @@ export class TenantSettingsService {
 
       return acc;
     }, { ...defaultAgentDiscountByCategory });
+  }
+
+  async getGstConfig(tenantId: string) {
+    const config = await this.getResolvedGstConfig(tenantId);
+
+    return {
+      sellerGstin: config.sellerGstin ?? null,
+      sellerStateCode: config.sellerStateCode ?? null,
+      rates: config.rates,
+    };
+  }
+
+  async updateGstConfig(
+    tenantId: string,
+    actorRole: UserRole,
+    dto: UpdateGstConfigDto,
+  ) {
+    if (actorRole !== UserRole.OWNER) {
+      throw new ForbiddenException('Only OWNER can update GST configuration');
+    }
+
+    const normalizedRates = dto.rates.map((rate) => ({
+      classificationCode: rate.classificationCode.trim().toUpperCase(),
+      ratePercentage: Number(rate.ratePercentage),
+    }));
+
+    const normalizedConfig: TenantGstConfig = {
+      sellerGstin: dto.sellerGstin?.trim() || undefined,
+      sellerStateCode: dto.sellerStateCode.trim().toUpperCase(),
+      rates: normalizedRates,
+    };
+
+    await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        gstConfig: normalizedConfig,
+      },
+    });
+
+    return this.getGstConfig(tenantId);
+  }
+
+  async getResolvedGstConfig(tenantId: string): Promise<TenantGstConfig> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { gstConfig: true },
+    });
+
+    const config =
+      tenant?.gstConfig &&
+      typeof tenant.gstConfig === 'object' &&
+      !Array.isArray(tenant.gstConfig)
+        ? (tenant.gstConfig as Record<string, unknown>)
+        : {};
+
+    const rawRates = Array.isArray(config.rates) ? config.rates : [];
+    const rates: TenantGstRateConfig[] = [];
+
+    for (const rawRate of rawRates) {
+      if (!rawRate || typeof rawRate !== 'object' || Array.isArray(rawRate)) {
+        continue;
+      }
+
+      const entry = rawRate as Record<string, unknown>;
+      const classificationCode =
+        typeof entry.classificationCode === 'string'
+          ? entry.classificationCode.trim().toUpperCase()
+          : '';
+      const ratePercentage =
+        typeof entry.ratePercentage === 'number' && Number.isFinite(entry.ratePercentage)
+          ? Number(entry.ratePercentage)
+          : NaN;
+
+      if (!classificationCode || Number.isNaN(ratePercentage)) {
+        continue;
+      }
+
+      rates.push({
+        classificationCode,
+        ratePercentage,
+      });
+    }
+
+    const sellerStateCode =
+      typeof config.sellerStateCode === 'string' && config.sellerStateCode.trim()
+        ? config.sellerStateCode.trim().toUpperCase()
+        : undefined;
+
+    const sellerGstin =
+      typeof config.sellerGstin === 'string' && config.sellerGstin.trim()
+        ? config.sellerGstin.trim()
+        : undefined;
+
+    return {
+      sellerGstin,
+      sellerStateCode,
+      rates,
+    };
   }
 }

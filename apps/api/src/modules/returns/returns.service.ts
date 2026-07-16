@@ -22,6 +22,10 @@ export class ReturnsService {
     private readonly commissionsService: CommissionsService,
   ) {}
 
+  private round2(value: number) {
+    return Number(value.toFixed(2));
+  }
+
   private readonly allowedStatusTransitions: Record<
     ProductReturnStatus,
     ProductReturnStatus[]
@@ -57,11 +61,23 @@ export class ReturnsService {
         },
         select: {
           id: true,
+          status: true,
           customerId: true,
           items: {
             select: {
+              id: true,
               productId: true,
               quantity: true,
+              lineTotal: true,
+              taxableAmount: true,
+              taxAmount: true,
+              igstAmount: true,
+              cgstAmount: true,
+              sgstAmount: true,
+              appliedTaxType: true,
+              gstRateApplied: true,
+              taxClassificationCode: true,
+              createdAt: true,
             },
           },
         },
@@ -69,6 +85,12 @@ export class ReturnsService {
 
       if (!quote) {
         throw new BadRequestException('Quote not found');
+      }
+
+      if (!['INVOICED', 'DISPATCHED'].includes(quote.status)) {
+        throw new BadRequestException(
+          'Sales return is allowed only for invoiced or dispatched quotes',
+        );
       }
 
       dto.customerId = dto.customerId ?? quote.customerId;
@@ -97,6 +119,7 @@ export class ReturnsService {
         select: {
           productId: true,
           quantity: true,
+          sourceTaxSnapshot: true,
         },
       });
 
@@ -108,6 +131,49 @@ export class ReturnsService {
           priorReturn.productId,
           current + Number(priorReturn.quantity),
         );
+      }
+
+      const returnedQtyByQuoteItem = new Map<string, number>();
+
+      for (const priorReturn of priorReturns) {
+        const snapshot = priorReturn.sourceTaxSnapshot;
+
+        if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+          continue;
+        }
+
+        const rawAllocations = (snapshot as Record<string, unknown>).allocations;
+
+        if (!Array.isArray(rawAllocations)) {
+          continue;
+        }
+
+        for (const rawAllocation of rawAllocations) {
+          if (
+            !rawAllocation ||
+            typeof rawAllocation !== 'object' ||
+            Array.isArray(rawAllocation)
+          ) {
+            continue;
+          }
+
+          const allocation = rawAllocation as Record<string, unknown>;
+          const quoteItemId =
+            typeof allocation.quoteItemId === 'string' ? allocation.quoteItemId : null;
+          const quantity =
+            typeof allocation.quantity === 'number' && Number.isFinite(allocation.quantity)
+              ? Number(allocation.quantity)
+              : null;
+
+          if (!quoteItemId || quantity === null) {
+            continue;
+          }
+
+          returnedQtyByQuoteItem.set(
+            quoteItemId,
+            (returnedQtyByQuoteItem.get(quoteItemId) ?? 0) + quantity,
+          );
+        }
       }
 
       for (const item of dto.items) {
@@ -125,6 +191,41 @@ export class ReturnsService {
         if (nextReturned > soldQty) {
           throw new BadRequestException(
             `Return quantity exceeds sold quantity for product ${item.productId}`,
+          );
+        }
+
+        const candidateQuoteItems = quote.items
+          .filter((quoteItem) => quoteItem.productId === item.productId)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+        let remainingToAllocate = item.quantity;
+
+        for (const quoteItem of candidateQuoteItems) {
+          if (remainingToAllocate <= 0) {
+            break;
+          }
+
+          const soldOnItem = Number(quoteItem.quantity);
+          const alreadyReturned = returnedQtyByQuoteItem.get(quoteItem.id) ?? 0;
+          const available = this.round2(Math.max(soldOnItem - alreadyReturned, 0));
+
+          if (available <= 0) {
+            continue;
+          }
+
+          const allocated = this.round2(Math.min(available, remainingToAllocate));
+
+          returnedQtyByQuoteItem.set(
+            quoteItem.id,
+            this.round2(alreadyReturned + allocated),
+          );
+
+          remainingToAllocate = this.round2(remainingToAllocate - allocated);
+        }
+
+        if (remainingToAllocate > 0) {
+          throw new BadRequestException(
+            `Unable to resolve source quote item quantities for product ${item.productId}`,
           );
         }
       }
@@ -244,38 +345,325 @@ export class ReturnsService {
       }
     }
 
-    const returnNumber = await this.generateReturnNumber(tenantId);
+    return this.prisma.$transaction(async (tx) => {
+      const sourceQuote =
+        dto.type === ProductReturnType.SALES_RETURN && dto.quoteId
+          ? await tx.quote.findFirst({
+              where: {
+                id: dto.quoteId,
+                tenantId,
+              },
+              select: {
+                id: true,
+                quoteNumber: true,
+                items: {
+                  select: {
+                    id: true,
+                    productId: true,
+                    quantity: true,
+                    lineTotal: true,
+                    taxableAmount: true,
+                    taxAmount: true,
+                    igstAmount: true,
+                    cgstAmount: true,
+                    sgstAmount: true,
+                    appliedTaxType: true,
+                    gstRateApplied: true,
+                    taxClassificationCode: true,
+                    createdAt: true,
+                  },
+                },
+              },
+            })
+          : null;
 
-    return this.prisma.productReturn.create({
-      data: {
-        tenantId,
-        returnNumber,
-        type: dto.type,
-        quoteId: dto.quoteId,
-        purchaseOrderId: dto.purchaseOrderId,
-        customerId: dto.customerId,
-        reason: dto.reason,
-        notes: dto.notes,
-        createdById: userId,
-        items: {
-          create: dto.items.map((item) => {
-            const product = productById.get(item.productId)!;
-            const lineTotal = item.quantity * item.unitPrice;
+      const priorReturnedItems =
+        dto.type === ProductReturnType.SALES_RETURN && dto.quoteId
+          ? await tx.productReturnItem.findMany({
+              where: {
+                productReturn: {
+                  tenantId,
+                  quoteId: dto.quoteId,
+                  type: ProductReturnType.SALES_RETURN,
+                  status: {
+                    not: ProductReturnStatus.REJECTED,
+                  },
+                },
+              },
+              select: {
+                sourceTaxSnapshot: true,
+              },
+            })
+          : [];
 
-            return {
-              productId: item.productId,
-              productName: product.name,
-              quantity: new Prisma.Decimal(item.quantity),
-              unitPrice: new Prisma.Decimal(item.unitPrice),
-              lineTotal: new Prisma.Decimal(lineTotal),
-              restockToInventory: item.restockToInventory ?? true,
-            };
-          }),
+      const returnedQtyByQuoteItem = new Map<string, number>();
+
+      for (const priorItem of priorReturnedItems) {
+        const snapshot = priorItem.sourceTaxSnapshot;
+
+        if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+          continue;
+        }
+
+        const rawAllocations = (snapshot as Record<string, unknown>).allocations;
+
+        if (!Array.isArray(rawAllocations)) {
+          continue;
+        }
+
+        for (const rawAllocation of rawAllocations) {
+          if (
+            !rawAllocation ||
+            typeof rawAllocation !== 'object' ||
+            Array.isArray(rawAllocation)
+          ) {
+            continue;
+          }
+
+          const allocation = rawAllocation as Record<string, unknown>;
+          const quoteItemId =
+            typeof allocation.quoteItemId === 'string' ? allocation.quoteItemId : null;
+          const quantity =
+            typeof allocation.quantity === 'number' && Number.isFinite(allocation.quantity)
+              ? Number(allocation.quantity)
+              : null;
+
+          if (!quoteItemId || quantity === null) {
+            continue;
+          }
+
+          returnedQtyByQuoteItem.set(
+            quoteItemId,
+            (returnedQtyByQuoteItem.get(quoteItemId) ?? 0) + quantity,
+          );
+        }
+      }
+
+      const returnNumber = await this.generateReturnNumber(tenantId);
+
+      const returnItemsCreateData = dto.items.map((item) => {
+        const product = productById.get(item.productId)!;
+        const lineTotal = this.round2(item.quantity * item.unitPrice);
+
+        if (!sourceQuote) {
+          return {
+            productId: item.productId,
+            productName: product.name,
+            quantity: new Prisma.Decimal(item.quantity),
+            unitPrice: new Prisma.Decimal(item.unitPrice),
+            lineTotal: new Prisma.Decimal(lineTotal),
+            taxableAmount: new Prisma.Decimal(lineTotal),
+            taxAmount: new Prisma.Decimal(0),
+            igstAmount: new Prisma.Decimal(0),
+            cgstAmount: new Prisma.Decimal(0),
+            sgstAmount: new Prisma.Decimal(0),
+            appliedTaxType: 'NONE' as const,
+            sourceTaxSnapshot: Prisma.JsonNull,
+            restockToInventory: item.restockToInventory ?? true,
+          };
+        }
+
+        const candidateQuoteItems = sourceQuote.items
+          .filter((quoteItem) => quoteItem.productId === item.productId)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+        let remainingQty = item.quantity;
+        const allocations: Array<{
+          quoteItemId: string;
+          quantity: number;
+          sourceQuantity: number;
+          sourceLineTotal: number;
+          sourceTaxableAmount: number;
+          sourceTaxAmount: number;
+          sourceIgstAmount: number;
+          sourceCgstAmount: number;
+          sourceSgstAmount: number;
+          gstRateApplied: number;
+          taxClassificationCode: string | null;
+          appliedTaxType: string;
+        }> = [];
+
+        for (const quoteItem of candidateQuoteItems) {
+          if (remainingQty <= 0) {
+            break;
+          }
+
+          const sourceQuantity = Number(quoteItem.quantity);
+          const alreadyReturned = returnedQtyByQuoteItem.get(quoteItem.id) ?? 0;
+          const availableQty = this.round2(Math.max(sourceQuantity - alreadyReturned, 0));
+
+          if (availableQty <= 0) {
+            continue;
+          }
+
+          const allocatedQty = this.round2(Math.min(availableQty, remainingQty));
+
+          allocations.push({
+            quoteItemId: quoteItem.id,
+            quantity: allocatedQty,
+            sourceQuantity,
+            sourceLineTotal: Number(quoteItem.lineTotal),
+            sourceTaxableAmount: Number(quoteItem.taxableAmount),
+            sourceTaxAmount: Number(quoteItem.taxAmount),
+            sourceIgstAmount: Number(quoteItem.igstAmount),
+            sourceCgstAmount: Number(quoteItem.cgstAmount),
+            sourceSgstAmount: Number(quoteItem.sgstAmount),
+            gstRateApplied: Number(quoteItem.gstRateApplied),
+            taxClassificationCode: quoteItem.taxClassificationCode,
+            appliedTaxType: quoteItem.appliedTaxType,
+          });
+
+          returnedQtyByQuoteItem.set(
+            quoteItem.id,
+            this.round2(alreadyReturned + allocatedQty),
+          );
+
+          remainingQty = this.round2(remainingQty - allocatedQty);
+        }
+
+        if (remainingQty > 0) {
+          throw new BadRequestException(
+            `Unable to resolve source quote item allocation for ${item.productId}`,
+          );
+        }
+
+        const allocatedSourceLineTotal = this.round2(
+          allocations.reduce(
+            (sum, allocation) =>
+              sum +
+              (allocation.sourceLineTotal * allocation.quantity) /
+                allocation.sourceQuantity,
+            0,
+          ),
+        );
+
+        const valueRatio =
+          allocatedSourceLineTotal > 0
+            ? Math.min(this.round2(lineTotal / allocatedSourceLineTotal), 1)
+            : 0;
+
+        const sourceTaxable = this.round2(
+          allocations.reduce(
+            (sum, allocation) =>
+              sum +
+              (allocation.sourceTaxableAmount * allocation.quantity) /
+                allocation.sourceQuantity,
+            0,
+          ),
+        );
+        const sourceTax = this.round2(
+          allocations.reduce(
+            (sum, allocation) =>
+              sum +
+              (allocation.sourceTaxAmount * allocation.quantity) /
+                allocation.sourceQuantity,
+            0,
+          ),
+        );
+        const sourceIgst = this.round2(
+          allocations.reduce(
+            (sum, allocation) =>
+              sum +
+              (allocation.sourceIgstAmount * allocation.quantity) /
+                allocation.sourceQuantity,
+            0,
+          ),
+        );
+        const sourceCgst = this.round2(
+          allocations.reduce(
+            (sum, allocation) =>
+              sum +
+              (allocation.sourceCgstAmount * allocation.quantity) /
+                allocation.sourceQuantity,
+            0,
+          ),
+        );
+        const sourceSgst = this.round2(
+          allocations.reduce(
+            (sum, allocation) =>
+              sum +
+              (allocation.sourceSgstAmount * allocation.quantity) /
+                allocation.sourceQuantity,
+            0,
+          ),
+        );
+
+        const taxableAmount = this.round2(sourceTaxable * valueRatio);
+        const taxAmount = this.round2(sourceTax * valueRatio);
+
+        const majorityType = allocations.find(
+          (allocation) => allocation.appliedTaxType !== 'NONE',
+        )?.appliedTaxType;
+
+        let igstAmount = 0;
+        let cgstAmount = 0;
+        let sgstAmount = 0;
+        let appliedTaxType: 'NONE' | 'IGST' | 'CGST_SGST' | 'MIXED' = 'NONE';
+
+        if (majorityType === 'IGST') {
+          igstAmount = taxAmount;
+          appliedTaxType = 'IGST';
+        } else if (majorityType === 'CGST_SGST') {
+          cgstAmount = this.round2(taxAmount / 2);
+          sgstAmount = this.round2(taxAmount - cgstAmount);
+          appliedTaxType = 'CGST_SGST';
+        } else {
+          igstAmount = this.round2(sourceIgst * valueRatio);
+          cgstAmount = this.round2(sourceCgst * valueRatio);
+          sgstAmount = this.round2(sourceSgst * valueRatio);
+          const sumComponents = this.round2(igstAmount + cgstAmount + sgstAmount);
+          const diff = this.round2(taxAmount - sumComponents);
+          if (diff !== 0) {
+            igstAmount = this.round2(igstAmount + diff);
+          }
+          const hasIgst = igstAmount > 0;
+          const hasSplit = cgstAmount > 0 || sgstAmount > 0;
+          appliedTaxType = hasIgst && hasSplit ? 'MIXED' : hasIgst ? 'IGST' : hasSplit ? 'CGST_SGST' : 'NONE';
+        }
+
+        return {
+          productId: item.productId,
+          productName: product.name,
+          quantity: new Prisma.Decimal(item.quantity),
+          unitPrice: new Prisma.Decimal(item.unitPrice),
+          lineTotal: new Prisma.Decimal(lineTotal),
+          taxableAmount: new Prisma.Decimal(taxableAmount),
+          taxAmount: new Prisma.Decimal(taxAmount),
+          igstAmount: new Prisma.Decimal(igstAmount),
+          cgstAmount: new Prisma.Decimal(cgstAmount),
+          sgstAmount: new Prisma.Decimal(sgstAmount),
+          appliedTaxType,
+          sourceTaxSnapshot: {
+            sourceQuoteId: sourceQuote.id,
+            sourceQuoteNumber: sourceQuote.quoteNumber,
+            returnLineTotal: lineTotal,
+            allocatedSourceLineTotal,
+            valueRatio,
+            allocations,
+          } as Prisma.InputJsonValue,
+          restockToInventory: item.restockToInventory ?? true,
+        };
+      }) as Prisma.ProductReturnItemUncheckedCreateWithoutProductReturnInput[];
+
+      return tx.productReturn.create({
+        data: {
+          tenantId,
+          returnNumber,
+          type: dto.type,
+          quoteId: dto.quoteId,
+          purchaseOrderId: dto.purchaseOrderId,
+          customerId: dto.customerId,
+          reason: dto.reason,
+          notes: dto.notes,
+          createdById: userId,
+          items: {
+            create: returnItemsCreateData,
+          },
         },
-      },
-      include: {
-        items: true,
-      },
+        include: {
+          items: true,
+        },
+      });
     });
   }
 

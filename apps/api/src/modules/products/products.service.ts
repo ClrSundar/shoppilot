@@ -55,6 +55,10 @@ export class ProductsService {
       const costPrice = getNumberCell(row, ['costprice', 'cost']);
       const sellingPrice = getNumberCell(row, ['sellingprice', 'price', 'mrp']);
       const sku = getStringCell(row, ['sku']) || undefined;
+      const taxClassificationCode =
+        getStringCell(row, ['taxclassificationcode', 'hsn', 'hsncode']) || undefined;
+      const taxClassificationLabel =
+        getStringCell(row, ['taxclassificationlabel', 'taxclassification']) || undefined;
 
       if (!name || costPrice === null || sellingPrice === null) {
         skipped += 1;
@@ -105,6 +109,8 @@ export class ProductsService {
           unit: getStringCell(row, ['unit']) || 'NOS',
           costPrice,
           sellingPrice,
+          taxClassificationCode,
+          taxClassificationLabel,
           imageUrl: getStringCell(row, ['imageurl', 'image']) || undefined,
         },
       });
@@ -209,6 +215,8 @@ export class ProductsService {
         allowBelowLandingPrice: dto.allowBelowLandingPrice ?? false,
 
         sellingPrice: dto.sellingPrice,
+        taxClassificationCode: dto.taxClassificationCode,
+        taxClassificationLabel: dto.taxClassificationLabel,
 
         imageUrl: dto.imageUrl,
       },

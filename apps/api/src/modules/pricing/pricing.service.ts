@@ -18,6 +18,102 @@ export class PricingService {
     return Number(value.toFixed(2));
   }
 
+  private normalizeStateCode(value: string | null | undefined) {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.trim().toUpperCase();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private buildTaxRateMap(gstConfig: unknown) {
+    if (!gstConfig || typeof gstConfig !== 'object' || Array.isArray(gstConfig)) {
+      return new Map<string, number>();
+    }
+
+    const config = gstConfig as Record<string, unknown>;
+    const rates = Array.isArray(config.rates) ? config.rates : [];
+    const map = new Map<string, number>();
+
+    for (const rateEntry of rates) {
+      if (!rateEntry || typeof rateEntry !== 'object' || Array.isArray(rateEntry)) {
+        continue;
+      }
+
+      const entry = rateEntry as Record<string, unknown>;
+      const classificationCodeRaw = entry.classificationCode;
+      const percentageRaw = entry.ratePercentage;
+
+      if (typeof classificationCodeRaw !== 'string') {
+        continue;
+      }
+
+      if (typeof percentageRaw !== 'number' || !Number.isFinite(percentageRaw)) {
+        continue;
+      }
+
+      const classificationCode = classificationCodeRaw.trim().toUpperCase();
+      if (!classificationCode) {
+        continue;
+      }
+
+      map.set(classificationCode, Number(percentageRaw));
+    }
+
+    return map;
+  }
+
+  private resolveAppliedTaxType(
+    sellerStateCode: string | null,
+    placeOfSupplyStateCode: string | null,
+  ): 'NONE' | 'IGST' | 'CGST_SGST' {
+    if (!sellerStateCode || !placeOfSupplyStateCode) {
+      return 'NONE';
+    }
+
+    return sellerStateCode === placeOfSupplyStateCode ? 'CGST_SGST' : 'IGST';
+  }
+
+  private allocateOrderDiscountByLine(
+    lineTaxables: number[],
+    orderDiscountAmount: number,
+  ) {
+    if (lineTaxables.length === 0 || orderDiscountAmount <= 0) {
+      return lineTaxables.map(() => 0);
+    }
+
+    const subtotalTaxable = this.round2(
+      lineTaxables.reduce((sum, value) => sum + value, 0),
+    );
+
+    if (subtotalTaxable <= 0) {
+      return lineTaxables.map(() => 0);
+    }
+
+    const allocations = lineTaxables.map((lineTaxable) =>
+      this.round2((lineTaxable / subtotalTaxable) * orderDiscountAmount),
+    );
+
+    const allocated = this.round2(
+      allocations.reduce((sum, value) => sum + value, 0),
+    );
+    const residual = this.round2(orderDiscountAmount - allocated);
+
+    if (residual !== 0) {
+      let maxIndex = 0;
+      for (let index = 1; index < lineTaxables.length; index += 1) {
+        if (lineTaxables[index] > lineTaxables[maxIndex]) {
+          maxIndex = index;
+        }
+      }
+
+      allocations[maxIndex] = this.round2(allocations[maxIndex] + residual);
+    }
+
+    return allocations;
+  }
+
   private resolveOrderDiscount(
     subtotalAfterLineDiscount: number,
     orderDiscountType: DiscountType | null,
@@ -152,9 +248,36 @@ export class PricingService {
       },
     });
 
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { gstConfig: true },
+    });
+
     if (!customer) {
       throw new BadRequestException('Customer not found');
     }
+
+    const gstConfig =
+      tenant?.gstConfig &&
+      typeof tenant.gstConfig === 'object' &&
+      !Array.isArray(tenant.gstConfig)
+        ? (tenant.gstConfig as Record<string, unknown>)
+        : {};
+
+    const sellerStateCode = this.normalizeStateCode(
+      typeof gstConfig.sellerStateCode === 'string'
+        ? gstConfig.sellerStateCode
+        : undefined,
+    );
+    const customerBillingStateCode = this.normalizeStateCode(customer.billingStateCode);
+    const placeOfSupplyStateCode = this.normalizeStateCode(
+      input.placeOfSupplyStateCode,
+    ) ?? customerBillingStateCode;
+    const appliedTaxType = this.resolveAppliedTaxType(
+      sellerStateCode,
+      placeOfSupplyStateCode,
+    );
+    const taxRateByClassification = this.buildTaxRateMap(gstConfig);
 
     const customerTypeDiscountPercentage = Number(
       customer.customerType?.defaultDiscountPercentage ?? 0,
@@ -274,6 +397,16 @@ export class PricingService {
         });
       }
 
+      const taxClassificationCode =
+        product.taxClassificationCode?.trim().toUpperCase() || null;
+      const configuredRate = taxClassificationCode
+        ? taxRateByClassification.get(taxClassificationCode)
+        : undefined;
+      // Backward compatibility: keep existing Product.gstRate as a fallback until fully migrated.
+      const fallbackRate = product.gstRate !== null ? Number(product.gstRate) : 0;
+      const gstRateApplied =
+        configuredRate !== undefined ? this.round2(configuredRate) : this.round2(fallbackRate);
+
       quoteItems.push({
         productId: product.id,
         productName: product.name,
@@ -288,6 +421,14 @@ export class PricingService {
         discountAmount: totalLineDiscountAmount,
         netUnitPrice,
         lineTotal,
+        taxClassificationCode,
+        gstRateApplied,
+        taxableAmount: lineTotal,
+        taxAmount: 0,
+        igstAmount: 0,
+        cgstAmount: 0,
+        sgstAmount: 0,
+        appliedTaxType,
         discountReason: item.discountReason,
       });
     }
@@ -308,8 +449,55 @@ export class PricingService {
       resolvedOrderDiscountValue,
     );
 
-    const taxableAmount = this.round2(subtotalAfterLineDiscount - orderDiscountAmount);
-    const taxAmount = 0;
+    const lineTaxablesBeforeOrderDiscount = quoteItems.map((item) => item.lineTotal);
+    const orderDiscountAllocations = this.allocateOrderDiscountByLine(
+      lineTaxablesBeforeOrderDiscount,
+      orderDiscountAmount,
+    );
+
+    let taxableAmount = 0;
+    let taxAmount = 0;
+    let igstAmount = 0;
+    let cgstAmount = 0;
+    let sgstAmount = 0;
+
+    for (let index = 0; index < quoteItems.length; index += 1) {
+      const quoteItem = quoteItems[index];
+      const allocatedDiscount = orderDiscountAllocations[index] ?? 0;
+      const lineTaxable = this.round2(
+        Math.max(quoteItem.lineTotal - allocatedDiscount, 0),
+      );
+      const lineTax = this.round2((lineTaxable * quoteItem.gstRateApplied) / 100);
+
+      let lineIgst = 0;
+      let lineCgst = 0;
+      let lineSgst = 0;
+
+      if (quoteItem.appliedTaxType === 'IGST') {
+        lineIgst = lineTax;
+      } else if (quoteItem.appliedTaxType === 'CGST_SGST') {
+        lineCgst = this.round2(lineTax / 2);
+        lineSgst = this.round2(lineTax - lineCgst);
+      }
+
+      quoteItem.taxableAmount = lineTaxable;
+      quoteItem.taxAmount = lineTax;
+      quoteItem.igstAmount = lineIgst;
+      quoteItem.cgstAmount = lineCgst;
+      quoteItem.sgstAmount = lineSgst;
+
+      taxableAmount = this.round2(taxableAmount + lineTaxable);
+      taxAmount = this.round2(taxAmount + lineTax);
+      igstAmount = this.round2(igstAmount + lineIgst);
+      cgstAmount = this.round2(cgstAmount + lineCgst);
+      sgstAmount = this.round2(sgstAmount + lineSgst);
+    }
+
+    const taxPercentage =
+      taxableAmount > 0
+        ? this.round2((taxAmount / taxableAmount) * 100)
+        : 0;
+
     const totalAmount = this.round2(taxableAmount + taxAmount);
     const totalDiscountAmount = this.round2(lineDiscountAmount + orderDiscountAmount);
 
@@ -323,7 +511,14 @@ export class PricingService {
       orderDiscountAmount,
       taxableAmount,
       taxAmount,
+      taxPercentage,
+      igstAmount,
+      cgstAmount,
+      sgstAmount,
       totalAmount,
+      sellerStateCode,
+      customerBillingStateCode,
+      placeOfSupplyStateCode,
       totalDiscountAmount,
       pendingApprovals,
       metadata: {
@@ -334,6 +529,12 @@ export class PricingService {
               defaultDiscountPercentage: customerTypeDiscountPercentage,
             }
           : null,
+        tax: {
+          sellerStateCode,
+          customerBillingStateCode,
+          placeOfSupplyStateCode,
+          appliedTaxType,
+        },
       },
     };
   }

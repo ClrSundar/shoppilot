@@ -61,11 +61,19 @@ export class QuotesController {
       subtotal: quote.subtotal.toNumber(),
       totalAmount: quote.totalAmount.toNumber(),
       taxAmount: quote.taxAmount.toNumber(),
+      igstAmount: quote.igstAmount.toNumber(),
+      cgstAmount: quote.cgstAmount.toNumber(),
+      sgstAmount: quote.sgstAmount.toNumber(),
       items: quote.items.map((item) => ({
         productName: item.productName,
         quantity: item.quantity.toNumber(),
         unitPrice: item.unitPrice.toNumber(),
         lineTotal: item.lineTotal.toNumber(),
+        taxableAmount: item.taxableAmount.toNumber(),
+        taxAmount: item.taxAmount.toNumber(),
+        igstAmount: item.igstAmount.toNumber(),
+        cgstAmount: item.cgstAmount.toNumber(),
+        sgstAmount: item.sgstAmount.toNumber(),
       })),
     });
 

@@ -7,6 +7,7 @@ import type { JwtPayload } from '../../common/types/jwt-payload.type';
 
 import { TenantSettingsService } from './tenant-settings.service';
 import { UpdateAgentDiscountConfigDto } from './dto/update-agent-discount-config.dto';
+import { UpdateGstConfigDto } from './dto/update-gst-config.dto';
 
 @ApiTags('Tenant Settings')
 @ApiBearerAuth('JWT-auth')
@@ -26,6 +27,23 @@ export class TenantSettingsController {
     @Body() dto: UpdateAgentDiscountConfigDto,
   ) {
     return this.tenantSettingsService.updateAgentDiscountConfig(
+      user.tenantId,
+      user.role,
+      dto,
+    );
+  }
+
+  @Get('gst-config')
+  getGstConfig(@CurrentUser() user: JwtPayload) {
+    return this.tenantSettingsService.getGstConfig(user.tenantId);
+  }
+
+  @Put('gst-config')
+  updateGstConfig(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateGstConfigDto,
+  ) {
+    return this.tenantSettingsService.updateGstConfig(
       user.tenantId,
       user.role,
       dto,

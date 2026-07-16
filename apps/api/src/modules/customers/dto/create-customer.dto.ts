@@ -22,6 +22,10 @@ export class CreateCustomerDto {
 
   @IsOptional()
   @IsString()
+  billingStateCode?: string;
+
+  @IsOptional()
+  @IsString()
   gstNumber?: string;
 
   @IsOptional()

@@ -146,6 +146,22 @@ describe('Commercial Guardrails E2E', () => {
       })
       .expect(201);
 
+    await request(app.getHttpServer())
+      .patch(`/api/quotes/${quoteResponse.body.id}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        status: 'APPROVED',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/quotes/${quoteResponse.body.id}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        status: 'INVOICED',
+      })
+      .expect(200);
+
     const invalidReturn = await request(app.getHttpServer())
       .post('/api/returns')
       .set('Authorization', `Bearer ${accessToken}`)
@@ -165,6 +181,44 @@ describe('Commercial Guardrails E2E', () => {
 
     expect(String(invalidReturn.body.message)).toContain(
       'Return quantity exceeds sold quantity',
+    );
+  });
+
+  it('blocks sales return creation for non-invoiced quote', async () => {
+    const quoteResponse = await request(app.getHttpServer())
+      .post('/api/quotes')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        customerId,
+        items: [
+          {
+            productId,
+            quantity: 1,
+          },
+        ],
+        notes: 'Guardrail test non-invoiced sales return',
+      })
+      .expect(201);
+
+    const invalidReturn = await request(app.getHttpServer())
+      .post('/api/returns')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        type: 'SALES_RETURN',
+        quoteId: quoteResponse.body.id,
+        items: [
+          {
+            productId,
+            quantity: 1,
+            unitPrice: Number(quoteResponse.body.totalAmount),
+            restockToInventory: true,
+          },
+        ],
+      })
+      .expect(400);
+
+    expect(String(invalidReturn.body.message)).toContain(
+      'Sales return is allowed only for invoiced or dispatched quotes',
     );
   });
 
@@ -256,6 +310,30 @@ describe('Commercial Guardrails E2E', () => {
         notes: 'Guardrail test return transition',
       })
       .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/api/quotes/${quoteResponse.body.id}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        status: 'APPROVED',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/quotes/${quoteResponse.body.id}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        status: 'INVOICED',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/quotes/${quoteResponse.body.id}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        status: 'DISPATCHED',
+      })
+      .expect(200);
 
     const createdReturn = await request(app.getHttpServer())
       .post('/api/returns')

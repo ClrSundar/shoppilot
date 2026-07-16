@@ -39,6 +39,8 @@ export class CustomersService {
             getStringCell(row, ['whatsappnumber', 'whatsapp']) || undefined,
           email: getStringCell(row, ['email']) || undefined,
           address: getStringCell(row, ['address']) || undefined,
+          billingStateCode:
+            getStringCell(row, ['billingstatecode', 'statecode']) || undefined,
           gstNumber: getStringCell(row, ['gstnumber', 'gst']) || undefined,
         },
       });
@@ -81,6 +83,7 @@ export class CustomersService {
         whatsappNumber: dto.whatsappNumber,
         email: dto.email,
         address: dto.address,
+        billingStateCode: dto.billingStateCode,
         gstNumber: dto.gstNumber,
         customerTypeId: dto.customerTypeId,
       },

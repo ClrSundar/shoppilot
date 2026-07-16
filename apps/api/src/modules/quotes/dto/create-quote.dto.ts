@@ -75,5 +75,9 @@ export class CreateQuoteDto {
   recommendationRunId?: string;
 
   @IsOptional()
+  @IsString()
+  placeOfSupplyStateCode?: string;
+
+  @IsOptional()
   metadata?: Record<string, unknown>;
 }

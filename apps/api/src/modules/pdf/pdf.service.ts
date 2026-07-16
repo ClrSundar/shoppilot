@@ -7,6 +7,9 @@ type QuotePdfData = {
   createdAt: Date;
   subtotal: number;
   taxAmount: number;
+  igstAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
   totalAmount: number;
   customer: {
     name: string;
@@ -23,6 +26,11 @@ type QuotePdfData = {
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+    taxableAmount?: number;
+    taxAmount?: number;
+    igstAmount?: number;
+    cgstAmount?: number;
+    sgstAmount?: number;
   }[];
 };
 
