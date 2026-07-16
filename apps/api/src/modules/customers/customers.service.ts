@@ -55,6 +55,23 @@ export class CustomersService {
   }
 
   async create(tenantId: string, dto: CreateCustomerDto) {
+    if (dto.customerTypeId) {
+      const customerType = await this.prisma.customerType.findFirst({
+        where: {
+          id: dto.customerTypeId,
+          tenantId,
+          active: true,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!customerType) {
+        throw new BadRequestException('Customer type not found');
+      }
+    }
+
     return this.prisma.customer.create({
       data: {
         tenantId,
@@ -65,6 +82,7 @@ export class CustomersService {
         email: dto.email,
         address: dto.address,
         gstNumber: dto.gstNumber,
+        customerTypeId: dto.customerTypeId,
       },
     });
   }
@@ -97,6 +115,23 @@ export class CustomersService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateCustomerDto) {
+    if (dto.customerTypeId) {
+      const customerType = await this.prisma.customerType.findFirst({
+        where: {
+          id: dto.customerTypeId,
+          tenantId,
+          active: true,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!customerType) {
+        throw new BadRequestException('Customer type not found');
+      }
+    }
+
     return this.prisma.customer.update({
       where: {
         id,

@@ -411,6 +411,51 @@ async function clearData() {
   console.log('✅ Data cleared.\n');
 }
 
+async function seedDefaultCustomerTypes(tenantId: string) {
+  console.log('\n🏷️  Seeding default customer types...');
+
+  const defaults = [
+    { code: 'RETAIL', name: 'Retail', defaultDiscountPercentage: 0 },
+    { code: 'WHOLESALE', name: 'Wholesale', defaultDiscountPercentage: 5 },
+    { code: 'DEALER', name: 'Dealer', defaultDiscountPercentage: 8 },
+    { code: 'CONTRACTOR', name: 'Contractor', defaultDiscountPercentage: 0 },
+  ];
+
+  const map: Record<string, string> = {};
+
+  for (const entry of defaults) {
+    const row = await prisma.customerType.upsert({
+      where: {
+        tenantId_code: {
+          tenantId,
+          code: entry.code,
+        },
+      },
+      update: {
+        name: entry.name,
+        defaultDiscountPercentage: entry.defaultDiscountPercentage,
+        active: true,
+      },
+      create: {
+        tenantId,
+        code: entry.code,
+        name: entry.name,
+        defaultDiscountPercentage: entry.defaultDiscountPercentage,
+        active: true,
+      },
+      select: {
+        id: true,
+        code: true,
+      },
+    });
+
+    map[row.code] = row.id;
+    console.log(`  ✅ ${entry.name} (${entry.defaultDiscountPercentage}%)`);
+  }
+
+  return map;
+}
+
 // ============================================================================
 // STEP 1 — ATTRIBUTE DEFINITIONS (platform-wide, no tenantId)
 // ============================================================================
@@ -640,15 +685,16 @@ async function seedDecisionRules(templateMap: Record<string, string>) {
 async function seedDemoPilotData(
   tenantId: string,
   skuMap: Record<string, string>,
+  customerTypeMap: Record<string, string>,
 ) {
   console.log('\n🧪 Seeding demo pilot data...');
 
   const customerSeeds = [
-    { name: 'Ravi Borewell Works', phone: '9000000001' },
-    { name: 'Lakshmi Farms', phone: '9000000002' },
-    { name: 'Suresh Agro', phone: '9000000003' },
-    { name: 'Greenfield Estates', phone: '9000000004' },
-    { name: 'City Pumps Service', phone: '9000000005' },
+    { name: 'Ravi Borewell Works', phone: '9000000001', customerTypeCode: 'RETAIL' },
+    { name: 'Lakshmi Farms', phone: '9000000002', customerTypeCode: 'WHOLESALE' },
+    { name: 'Suresh Agro', phone: '9000000003', customerTypeCode: 'DEALER' },
+    { name: 'Greenfield Estates', phone: '9000000004', customerTypeCode: 'CONTRACTOR' },
+    { name: 'City Pumps Service', phone: '9000000005', customerTypeCode: 'RETAIL' },
   ];
 
   const customerMap: Record<string, string> = {};
@@ -667,6 +713,7 @@ async function seedDemoPilotData(
           data: {
             name: customer.name,
             active: true,
+            customerTypeId: customerTypeMap[customer.customerTypeCode],
           },
         })
       : await prisma.customer.create({
@@ -674,6 +721,7 @@ async function seedDemoPilotData(
             tenantId,
             name: customer.name,
             phone: customer.phone,
+            customerTypeId: customerTypeMap[customer.customerTypeCode],
             active: true,
           },
         });
@@ -1320,13 +1368,27 @@ async function runAllSeeds() {
     console.log('');
 
     await clearData();
+    const tenants = await prisma.tenant.findMany({
+      select: {
+        id: true,
+      },
+    });
+
+    const customerTypeMapsByTenant = new Map<string, Record<string, string>>();
+
+    for (const row of tenants) {
+      const map = await seedDefaultCustomerTypes(row.id);
+      customerTypeMapsByTenant.set(row.id, map);
+    }
+
+    const customerTypeMap = customerTypeMapsByTenant.get(tenant.id) ?? {};
     const attrMap = await seedAttributeDefinitions();
     const categoryMap = await seedCategories(tenant.id);
     const skuMap = await seedProducts(tenant.id, categoryMap, attrMap);
     await seedCompatibility(tenant.id, skuMap);
     const templateMap = await seedSolutionTemplates(tenant.id, skuMap);
     await seedDecisionRules(templateMap);
-    await seedDemoPilotData(tenant.id, skuMap);
+    await seedDemoPilotData(tenant.id, skuMap, customerTypeMap);
     await seedCommercialData(tenant.id, skuMap);
 
     console.log('\n✨ All seeds completed successfully!');

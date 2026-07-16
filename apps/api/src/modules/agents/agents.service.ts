@@ -163,7 +163,13 @@ export class AgentsService {
   }
 
   async getOverviewStats(tenantId: string) {
-    const [totalAgents, activeAgents, quoteSummary, topCommissionRows] =
+    const [
+      totalAgents,
+      activeAgents,
+      quoteSummary,
+      accrualSummary,
+      topCommissionRows,
+    ] =
       await Promise.all([
         this.prisma.agent.count({ where: { tenantId } }),
         this.prisma.agent.count({ where: { tenantId, active: true } }),
@@ -179,27 +185,31 @@ export class AgentsService {
           },
           _sum: {
             totalAmount: true,
-            agentCommissionAmount: true,
           },
         }),
-        this.prisma.quote.groupBy({
+        this.prisma.agentCommissionAccrual.aggregate({
+          where: {
+            tenantId,
+          },
+          _sum: {
+            commissionAmount: true,
+          },
+        }),
+        this.prisma.agentCommissionAccrual.groupBy({
           by: ['agentId'],
           where: {
             tenantId,
-            agentId: {
-              not: null,
-            },
           },
           _count: {
             _all: true,
           },
           _sum: {
-            totalAmount: true,
-            agentCommissionAmount: true,
+            basisAmount: true,
+            commissionAmount: true,
           },
           orderBy: {
             _sum: {
-              agentCommissionAmount: 'desc',
+              commissionAmount: 'desc',
             },
           },
           take: 5,
@@ -233,13 +243,13 @@ export class AgentsService {
       inactiveAgents: totalAgents - activeAgents,
       totalReferredQuotes: quoteSummary._count._all,
       totalReferredAmount: Number(quoteSummary._sum.totalAmount ?? 0),
-      totalCommissionAmount: Number(quoteSummary._sum.agentCommissionAmount ?? 0),
+      totalCommissionAmount: Number(accrualSummary._sum.commissionAmount ?? 0),
       topAgentsByCommission: topCommissionRows.map((row) => ({
         agentId: row.agentId,
         agent: row.agentId ? topAgentById.get(row.agentId) ?? null : null,
-        quoteCount: row._count._all,
-        totalAmount: Number(row._sum.totalAmount ?? 0),
-        totalCommissionAmount: Number(row._sum.agentCommissionAmount ?? 0),
+        accrualCount: row._count._all,
+        totalAmount: Number(row._sum.basisAmount ?? 0),
+        totalCommissionAmount: Number(row._sum.commissionAmount ?? 0),
       })),
     };
   }
@@ -247,7 +257,7 @@ export class AgentsService {
   async getAgentStats(tenantId: string, agentId: string) {
     const agent = await this.ensureAgentExists(tenantId, agentId);
 
-    const [summary, convertedQuoteCount, recentQuotes] = await Promise.all([
+    const [summary, commissionSummary, convertedQuoteCount, recentQuotes] = await Promise.all([
       this.prisma.quote.aggregate({
         where: {
           tenantId,
@@ -258,7 +268,15 @@ export class AgentsService {
         },
         _sum: {
           totalAmount: true,
-          agentCommissionAmount: true,
+        },
+      }),
+      this.prisma.agentCommissionAccrual.aggregate({
+        where: {
+          tenantId,
+          agentId,
+        },
+        _sum: {
+          commissionAmount: true,
         },
       }),
       this.prisma.quote.count({
@@ -295,7 +313,7 @@ export class AgentsService {
         ? Number(((convertedQuoteCount / totalQuotes) * 100).toFixed(2))
         : 0,
       totalReferredAmount: Number(summary._sum.totalAmount ?? 0),
-      totalCommissionAmount: Number(summary._sum.agentCommissionAmount ?? 0),
+      totalCommissionAmount: Number(commissionSummary._sum.commissionAmount ?? 0),
       recentQuotes,
     };
   }

@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateCustomerDto {
   @IsString()
@@ -23,4 +23,8 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   gstNumber?: string;
+
+  @IsOptional()
+  @IsUUID()
+  customerTypeId?: string;
 }

@@ -12,11 +12,15 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { CommissionsService } from '../commissions/commissions.service';
 import { CreateProductReturnDto } from './dto/create-product-return.dto';
 
 @Injectable()
 export class ReturnsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly commissionsService: CommissionsService,
+  ) {}
 
   private readonly allowedStatusTransitions: Record<
     ProductReturnStatus,
@@ -311,7 +315,7 @@ export class ReturnsService {
     id: string,
     status: ProductReturnStatus,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const updatedReturn = await this.prisma.$transaction(async (tx) => {
       const productReturn = await tx.productReturn.findFirst({
         where: {
           tenantId,
@@ -469,5 +473,17 @@ export class ReturnsService {
         },
       });
     });
+
+    if (
+      updatedReturn.status === ProductReturnStatus.COMPLETED &&
+      updatedReturn.type === ProductReturnType.SALES_RETURN
+    ) {
+      await this.commissionsService.createReversalForCompletedSalesReturn(
+        tenantId,
+        updatedReturn.id,
+      );
+    }
+
+    return updatedReturn;
   }
 }

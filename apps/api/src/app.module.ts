@@ -25,6 +25,9 @@ import { PurchasesModule } from './modules/purchases/purchases.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ReturnsModule } from './modules/returns/returns.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { PricingModule } from './modules/pricing/pricing.module';
+import { CommissionsModule } from './modules/commissions/commissions.module';
+import { CustomerTypesModule } from './modules/customer-types/customer-types.module';
 
 @Module({
   imports: [
@@ -54,6 +57,9 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
     PaymentsModule,
     ReturnsModule,
     SuppliersModule,
+    PricingModule,
+    CommissionsModule,
+    CustomerTypesModule,
   ],
   providers: [
     {

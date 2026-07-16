@@ -6,11 +6,15 @@ import {
 import { PaymentDirection, PaymentStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { CommissionsService } from '../commissions/commissions.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly commissionsService: CommissionsService,
+  ) {}
 
   async create(tenantId: string, userId: string, dto: CreatePaymentDto) {
     let linkedQuoteId = dto.quoteId;
@@ -152,7 +156,7 @@ export class PaymentsService {
       }
     }
 
-    return this.prisma.payment.create({
+    const payment = await this.prisma.payment.create({
       data: {
         tenantId,
         quoteId: linkedQuoteId,
@@ -188,6 +192,20 @@ export class PaymentsService {
         },
       },
     });
+
+    if (
+      linkedQuoteId &&
+      payment.status === PaymentStatus.COMPLETED &&
+      payment.direction === PaymentDirection.RECEIVED
+    ) {
+      await this.commissionsService.markAccrualsEarnedForQuotePayment(
+        tenantId,
+        linkedQuoteId,
+        payment.id,
+      );
+    }
+
+    return payment;
   }
 
   async findAll(tenantId: string) {

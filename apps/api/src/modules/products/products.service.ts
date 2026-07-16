@@ -126,10 +126,18 @@ export class ProductsService {
     };
   }
 
-  private validatePrices(dto: { costPrice?: number; landingPrice?: number; sellingPrice?: number }) {
+  private validatePrices(dto: {
+    costPrice?: number;
+    landingPrice?: number;
+    sellingPrice?: number;
+    minimumMarginPercent?: number;
+    allowBelowLandingPrice?: boolean;
+  }) {
     const landingPrice = dto.landingPrice;
     const sellingPrice = dto.sellingPrice;
     const costPrice = dto.costPrice;
+    const minimumMarginPercent = dto.minimumMarginPercent ?? 0;
+    const allowBelowLandingPrice = dto.allowBelowLandingPrice ?? false;
 
     if (landingPrice !== undefined && costPrice !== undefined && landingPrice < costPrice) {
       throw new BadRequestException(
@@ -137,10 +145,32 @@ export class ProductsService {
       );
     }
 
-    if (landingPrice !== undefined && sellingPrice !== undefined && sellingPrice < landingPrice) {
+    if (minimumMarginPercent > 0 && landingPrice === undefined) {
+      throw new BadRequestException(
+        'Landing price is required when minimum margin percent is set',
+      );
+    }
+
+    if (
+      landingPrice !== undefined &&
+      sellingPrice !== undefined &&
+      sellingPrice < landingPrice &&
+      !allowBelowLandingPrice
+    ) {
       throw new BadRequestException(
         'Selling price cannot be less than landing price',
       );
+    }
+
+    if (landingPrice !== undefined && sellingPrice !== undefined) {
+      const minimumAllowedSellingPrice =
+        landingPrice + (landingPrice * minimumMarginPercent) / 100;
+
+      if (sellingPrice < minimumAllowedSellingPrice && !allowBelowLandingPrice) {
+        throw new BadRequestException(
+          `Selling price cannot be less than minimum allowed selling price ${minimumAllowedSellingPrice.toFixed(2)}`,
+        );
+      }
     }
   }
 
@@ -175,6 +205,8 @@ export class ProductsService {
         costPrice: dto.costPrice,
 
         landingPrice: dto.landingPrice ?? null,
+        minimumMarginPercent: dto.minimumMarginPercent ?? null,
+        allowBelowLandingPrice: dto.allowBelowLandingPrice ?? false,
 
         sellingPrice: dto.sellingPrice,
 
@@ -282,6 +314,13 @@ export class ProductsService {
       costPrice: dto.costPrice ?? Number(existingProduct.costPrice),
       landingPrice: dto.landingPrice ?? (existingProduct.landingPrice !== null ? Number(existingProduct.landingPrice) : undefined),
       sellingPrice: dto.sellingPrice ?? Number(existingProduct.sellingPrice),
+      minimumMarginPercent:
+        dto.minimumMarginPercent ??
+        (existingProduct.minimumMarginPercent !== null
+          ? Number(existingProduct.minimumMarginPercent)
+          : undefined),
+      allowBelowLandingPrice:
+        dto.allowBelowLandingPrice ?? existingProduct.allowBelowLandingPrice,
     });
 
     return this.prisma.product.update({

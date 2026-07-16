@@ -36,7 +36,10 @@ export class QuotesController {
 
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateQuoteDto) {
-    return this.quotesService.create(user.tenantId, dto);
+    return this.quotesService.create(user.tenantId, dto, {
+      userId: user.sub,
+      role: user.role,
+    });
   }
 
   @Get()
@@ -95,6 +98,9 @@ export class QuotesController {
     @Param('id') id: string,
     @Body() dto: UpdateQuoteDto,
   ) {
-    return this.quotesService.update(user.tenantId, id, dto);
+    return this.quotesService.update(user.tenantId, id, dto, {
+      userId: user.sub,
+      role: user.role,
+    });
   }
 }

@@ -9,214 +9,264 @@ datasource db {
 }
 
 model Tenant {
-  id           String        @id @default(uuid())
+  id String @id @default(uuid())
 
-  name         String
-  code         String        @unique
+  name String
+  code String @unique
 
-  businessType BusinessType  @default(GENERAL)
+  businessType BusinessType @default(GENERAL)
 
-  email        String?
-  phone        String?
+  email String?
+  phone String?
 
-  active       Boolean       @default(true)
-  status       TenantStatus  @default(PENDING)
+  active Boolean      @default(true)
+  status TenantStatus @default(PENDING)
 
-  rejectedReason String?
+  rejectedReason      String?
   agentDiscountConfig Json?
 
-  approvedById   String?
-  approvedAt     DateTime?
+  approvedById String?
+  approvedAt   DateTime?
 
-  users        User[]
-  categories   ProductCategory[]
-  products     Product[]
-  inventoryStocks InventoryStock[]
-  inventoryLedgerEntries InventoryLedgerEntry[]
-  customers    Customer[]
-  suppliers    Supplier[]
-  agents       Agent[]
-  quotes       Quote[]
-  purchaseOrders PurchaseOrder[]
-  payments     Payment[]
-  productReturns ProductReturn[]
-  whatsappConversations WhatsAppConversation[]
-  whatsappMessages WhatsAppMessage[]
-  copilotSessions CopilotSession[]
-  copilotMessages CopilotMessage[]
-  copilotDraftConfirmations CopilotDraftConfirmation[]
-  subscription  Subscription?
-  featureOverrides TenantFeatureOverride[]
-  usageCounters UsageCounter[]
-  recommendationRuns RecommendationRun[]
+  users                      User[]
+  categories                 ProductCategory[]
+  products                   Product[]
+  inventoryStocks            InventoryStock[]
+  inventoryLedgerEntries     InventoryLedgerEntry[]
+  customers                  Customer[]
+  customerTypes              CustomerType[]
+  suppliers                  Supplier[]
+  agents                     Agent[]
+  discountRules              DiscountRule[]
+  quotes                     Quote[]
+  priceOverrideApprovals     PriceOverrideApproval[]
+  agentCommissionRules       AgentCommissionRule[]
+  agentCommissionAccruals    AgentCommissionAccrual[]
+  agentCommissionSettlements AgentCommissionSettlement[]
+  purchaseOrders             PurchaseOrder[]
+  payments                   Payment[]
+  productReturns             ProductReturn[]
+  whatsappConversations      WhatsAppConversation[]
+  whatsappMessages           WhatsAppMessage[]
+  copilotSessions            CopilotSession[]
+  copilotMessages            CopilotMessage[]
+  copilotDraftConfirmations  CopilotDraftConfirmation[]
+  subscription               Subscription?
+  featureOverrides           TenantFeatureOverride[]
+  usageCounters              UsageCounter[]
+  recommendationRuns         RecommendationRun[]
 
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum CommissionType {
   PERCENTAGE
+  FIXED_AMOUNT
+  PER_UNIT
+  SLAB
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FIXED_PRICE
+}
+
+enum DiscountScope {
+  PRODUCT
+  CATEGORY
+  CUSTOMER
+  CUSTOMER_TYPE
+  QUOTE
+  TENANT
+}
+
+enum ApprovalStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+
+enum CommissionBasis {
+  GROSS_SALES
+  NET_SALES
+  GROSS_MARGIN
+  PRODUCT_MARGIN
+  PAYMENT_RECEIVED
+}
+
+enum CommissionStatus {
+  PENDING
+  EARNED
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+  REVERSED
 }
 
 model PlatformAdmin {
-  id        String            @id @default(uuid())
+  id String @id @default(uuid())
 
-  name      String
-  email     String            @unique
-  password  String
+  name     String
+  email    String @unique
+  password String
 
-  role      PlatformAdminRole @default(SUPPORT_ADMIN)
+  role PlatformAdminRole @default(SUPPORT_ADMIN)
 
-  active    Boolean           @default(true)
+  active Boolean @default(true)
 
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
+
 model Plan {
-  id                String          @id @default(uuid())
-  code              String          @unique
-  name              String
-  description       String?
-  isActive          Boolean         @default(true)
-  
-  billingCycle      BillingCycle    @default(MONTHLY)
-  priceAmount       Decimal         @db.Decimal(10,2)
-  currency          String          @default("USD")
-  trialDays         Int             @default(0)
-  
-  features          PlanFeature[]
-  subscriptions     Subscription[]
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
+  id          String  @id @default(uuid())
+  code        String  @unique
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  billingCycle BillingCycle @default(MONTHLY)
+  priceAmount  Decimal      @db.Decimal(10, 2)
+  currency     String       @default("USD")
+  trialDays    Int          @default(0)
+
+  features      PlanFeature[]
+  subscriptions Subscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([isActive])
 }
 
 model FeatureFlag {
-  id                String          @id @default(uuid())
-  code              String          @unique
-  name              String
-  description       String?
-  isActive          Boolean         @default(true)
-  
-  planFeatures      PlanFeature[]
-  overrides         TenantFeatureOverride[]
-  usageCounters     UsageCounter[]
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id          String  @id @default(uuid())
+  code        String  @unique
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  planFeatures  PlanFeature[]
+  overrides     TenantFeatureOverride[]
+  usageCounters UsageCounter[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model PlanFeature {
-  id                String          @id @default(uuid())
-  
-  planId            String
-  plan              Plan            @relation(fields: [planId], references: [id])
-  
-  featureFlagId     String
-  featureFlag       FeatureFlag     @relation(fields: [featureFlagId], references: [id])
-  
-  enabled           Boolean         @default(true)
-  limitValue        Int?
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
+  id String @id @default(uuid())
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  featureFlagId String
+  featureFlag   FeatureFlag @relation(fields: [featureFlagId], references: [id])
+
+  enabled    Boolean @default(true)
+  limitValue Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([planId, featureFlagId])
   @@index([planId])
   @@index([featureFlagId])
 }
 
 model Subscription {
-  id                String          @id @default(uuid())
-  
-  tenantId          String          @unique
-  tenant            Tenant          @relation(fields: [tenantId], references: [id])
-  
-  planId            String
-  plan              Plan            @relation(fields: [planId], references: [id])
-  
+  id String @id @default(uuid())
+
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id])
+
   status            SubscriptionStatus @default(ACTIVE)
   startAt           DateTime
   endAt             DateTime?
   trialEndAt        DateTime?
-  cancelAtPeriodEnd Boolean         @default(false)
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
+  cancelAtPeriodEnd Boolean            @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([tenantId])
   @@index([planId])
   @@index([status])
 }
 
 model TenantFeatureOverride {
-  id                String          @id @default(uuid())
-  
-  tenantId          String
-  tenant            Tenant          @relation(fields: [tenantId], references: [id])
-  
-  featureFlagId     String
-  featureFlag       FeatureFlag     @relation(fields: [featureFlagId], references: [id])
-  
-  enabled           Boolean
-  limitValue        Int?
-  reason            String?
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  featureFlagId String
+  featureFlag   FeatureFlag @relation(fields: [featureFlagId], references: [id])
+
+  enabled    Boolean
+  limitValue Int?
+  reason     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([tenantId, featureFlagId])
   @@index([tenantId])
   @@index([featureFlagId])
 }
 
 model UsageCounter {
-  id                String          @id @default(uuid())
-  
-  tenantId          String
-  tenant            Tenant          @relation(fields: [tenantId], references: [id])
-  
-  featureFlagId     String
-  featureFlag       FeatureFlag     @relation(fields: [featureFlagId], references: [id])
-  
-  periodKey         String
-  usedCount         Int             @default(0)
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  
-  @@unique([tenantId, featureFlagId, periodKey])
-  @@index([tenantId])
-  @@index([periodKey])
-}
-model User {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  name      String
-  email     String
+  featureFlagId String
+  featureFlag   FeatureFlag @relation(fields: [featureFlagId], references: [id])
 
-  password  String
-
-  role      UserRole
-
-  active    Boolean  @default(true)
-
-  copilotSessions CopilotSession[]
-  copilotMessages CopilotMessage[]
-  copilotDraftConfirmations CopilotDraftConfirmation[]
-  recommendationRuns RecommendationRun[]
-  recommendationFeedbacks RecommendationFeedback[]
+  periodKey String
+  usedCount Int    @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, featureFlagId, periodKey])
   @@index([tenantId])
+  @@index([periodKey])
+}
+
+model User {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  name  String
+  email String
+
+  password String
+
+  role UserRole
+
+  active Boolean @default(true)
+
+  copilotSessions           CopilotSession[]
+  copilotMessages           CopilotMessage[]
+  copilotDraftConfirmations CopilotDraftConfirmation[]
+  recommendationRuns        RecommendationRun[]
+  recommendationFeedbacks   RecommendationFeedback[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 enum UserRole {
@@ -259,70 +309,76 @@ enum SubscriptionStatus {
 }
 
 model ProductCategory {
-  id          String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
   name        String
   description String?
 
-  active      Boolean  @default(true)
+  active Boolean @default(true)
 
-  products    Product[]
+  products        Product[]
+  discountRules   DiscountRule[]
+  commissionRules AgentCommissionRule[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([tenantId])
   @@unique([tenantId, name])
+  @@index([tenantId])
 }
 
 model Product {
-  id            String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  categoryId    String
-  category      ProductCategory @relation(fields: [categoryId], references: [id])
+  categoryId String
+  category   ProductCategory @relation(fields: [categoryId], references: [id])
 
-  name          String
+  name String
 
-  sku           String?
+  sku String?
 
-  brand         String?
+  brand String?
 
-  description   String?
+  description String?
 
-  unit          String   @default("NOS")
+  unit String @default("NOS")
 
-  costPrice     Decimal  @db.Decimal(12,2)
-  landingPrice  Decimal? @db.Decimal(12,2)
-  sellingPrice  Decimal  @db.Decimal(12,2)
+  costPrice              Decimal  @db.Decimal(12, 2)
+  landingPrice           Decimal? @db.Decimal(12, 2)
+  minimumMarginPercent   Decimal? @db.Decimal(5, 2)
+  allowBelowLandingPrice Boolean  @default(false)
+  sellingPrice           Decimal  @db.Decimal(12, 2)
 
-  gstRate       Decimal? @db.Decimal(5,2)
+  gstRate Decimal? @db.Decimal(5, 2)
 
-  barcode       String?
+  barcode String?
 
-  imageUrl      String?
+  imageUrl String?
 
-  metadata      Json?
+  metadata Json?
 
-  active        Boolean  @default(true)
+  active Boolean @default(true)
 
-  quoteItems    QuoteItem[]
-  purchaseOrderItems PurchaseOrderItem[]
-  productReturnItems ProductReturnItem[]
-  inventoryStocks InventoryStock[]
-  inventoryLedgerEntries InventoryLedgerEntry[]
-  attributeValues ProductAttributeValue[]
-  sourceCompatibilities ProductCompatibility[] @relation("sourceCompatibility")
-  targetCompatibilities ProductCompatibility[] @relation("targetCompatibility")
+  quoteItems               QuoteItem[]
+  purchaseOrderItems       PurchaseOrderItem[]
+  productReturnItems       ProductReturnItem[]
+  inventoryStocks          InventoryStock[]
+  inventoryLedgerEntries   InventoryLedgerEntry[]
+  attributeValues          ProductAttributeValue[]
+  sourceCompatibilities    ProductCompatibility[]    @relation("sourceCompatibility")
+  targetCompatibilities    ProductCompatibility[]    @relation("targetCompatibility")
   recommendationCandidates RecommendationCandidate[]
+  discountRules            DiscountRule[]
+  commissionRules          AgentCommissionRule[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId])
   @@index([categoryId])
@@ -336,30 +392,30 @@ enum AttributeDataType {
 }
 
 model AttributeDefinition {
-  id                    String                @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId              String?
+  tenantId String?
 
-  code                  String
+  code String
 
-  name                  String
+  name String
 
-  dataType              AttributeDataType
+  dataType AttributeDataType
 
-  unit                  String?
+  unit String?
 
-  allowedValues         Json?
+  allowedValues Json?
 
-  description           String?
+  description String?
 
-  appliesToCategoryId   String?
+  appliesToCategoryId String?
 
-  active                Boolean               @default(true)
+  active Boolean @default(true)
 
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  attributeValues       ProductAttributeValue[]
+  attributeValues ProductAttributeValue[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -367,24 +423,24 @@ model AttributeDefinition {
 }
 
 model ProductAttributeValue {
-  id                          String                @id @default(uuid())
+  id String @id @default(uuid())
 
-  productId                   String
-  product                     Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  attributeDefinitionId       String
-  attributeDefinition         AttributeDefinition   @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
+  attributeDefinitionId String
+  attributeDefinition   AttributeDefinition @relation(fields: [attributeDefinitionId], references: [id], onDelete: Cascade)
 
-  valueText                   String?
+  valueText String?
 
-  valueNumber                 Decimal?
+  valueNumber Decimal?
 
-  valueBoolean                Boolean?
+  valueBoolean Boolean?
 
-  valueJson                   Json?
+  valueJson Json?
 
-  createdAt                   DateTime              @default(now())
-  updatedAt                   DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([productId, attributeDefinitionId])
   @@index([productId])
@@ -392,87 +448,121 @@ model ProductAttributeValue {
 }
 
 model Customer {
-  id              String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  name            String
+  name String
 
-  phone           String?
-  whatsappNumber  String?
-  email           String?
+  phone          String?
+  whatsappNumber String?
+  email          String?
 
-  address         String?
+  address String?
 
-  gstNumber       String?
+  gstNumber String?
 
-  active          Boolean  @default(true)
+  customerTypeId String?
+  customerType   CustomerType? @relation(fields: [customerTypeId], references: [id])
 
-  quotes          Quote[]
-  payments        Payment[]
-  productReturns  ProductReturn[]
+  active Boolean @default(true)
+
+  quotes                Quote[]
+  payments              Payment[]
+  productReturns        ProductReturn[]
   whatsappConversations WhatsAppConversation[]
-  whatsappMessages WhatsAppMessage[]
-  recommendationRuns RecommendationRun[]
+  whatsappMessages      WhatsAppMessage[]
+  recommendationRuns    RecommendationRun[]
+  discountRules         DiscountRule[]
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([tenantId])
   @@index([name])
+  @@index([customerTypeId])
+}
+
+model CustomerType {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  code String
+  name String
+
+  defaultDiscountPercentage Decimal  @default(0) @db.Decimal(5, 2)
+  priceListId               String?
+  creditDays                Int?
+  creditLimit               Decimal? @db.Decimal(12, 2)
+
+  active Boolean @default(true)
+
+  customers     Customer[]
+  discountRules DiscountRule[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
 }
 
 model Supplier {
-  id              String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  name            String
-  phone           String?
-  email           String?
-  address         String?
-  gstNumber       String?
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  gstNumber String?
 
-  active          Boolean  @default(true)
+  active Boolean @default(true)
 
-  purchaseOrders  PurchaseOrder[]
+  purchaseOrders PurchaseOrder[]
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, name])
   @@index([tenantId])
   @@index([name])
-  @@unique([tenantId, name])
 }
 
 model Agent {
-  id                          String          @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId                    String
-  tenant                      Tenant          @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  name                        String
-  phone                       String?
-  whatsappNumber              String?
-  email                       String?
-  address                     String?
-  referenceCode               String?
+  name           String
+  phone          String?
+  whatsappNumber String?
+  email          String?
+  address        String?
+  referenceCode  String?
 
-  defaultCommissionType       CommissionType  @default(PERCENTAGE)
-  defaultCommissionPercentage Decimal         @default(0) @db.Decimal(5,2)
+  defaultCommissionType       CommissionType @default(PERCENTAGE)
+  defaultCommissionPercentage Decimal        @default(0) @db.Decimal(5, 2)
 
-  active                      Boolean         @default(true)
+  active Boolean @default(true)
 
-  quotes                      Quote[]
+  quotes                Quote[]
+  commissionRules       AgentCommissionRule[]
+  commissionAccruals    AgentCommissionAccrual[]
+  commissionSettlements AgentCommissionSettlement[]
 
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, referenceCode])
   @@index([tenantId])
   @@index([name])
-  @@unique([tenantId, referenceCode])
 }
 
 enum QuoteStatus {
@@ -522,127 +612,127 @@ enum CopilotMessageRole {
 }
 
 model CopilotSession {
-  id            String           @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant           @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  userId        String
-  user          User             @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  sessionId     String
+  sessionId String
 
-  messages      CopilotMessage[]
+  messages           CopilotMessage[]
   draftConfirmations CopilotDraftConfirmation[]
   recommendationRuns RecommendationRun[]
 
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tenantId, userId, sessionId])
   @@index([tenantId, userId, updatedAt])
 }
 
 model CopilotDraftConfirmation {
-  id            String           @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant           @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  userId        String
-  user          User             @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  sessionDbId   String
-  session       CopilotSession   @relation(fields: [sessionDbId], references: [id], onDelete: Cascade)
+  sessionDbId String
+  session     CopilotSession @relation(fields: [sessionDbId], references: [id], onDelete: Cascade)
 
-  token         String           @unique
-  draftPayload  Json
+  token        String @unique
+  draftPayload Json
 
-  expiresAt     DateTime
-  usedAt        DateTime?
+  expiresAt DateTime
+  usedAt    DateTime?
 
   idempotencyKey String?
 
-  quoteId       String?
-  quote         Quote?           @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  quoteId String?
+  quote   Quote?  @relation(fields: [quoteId], references: [id], onDelete: SetNull)
 
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, userId, idempotencyKey])
   @@index([tenantId, userId, expiresAt])
   @@index([sessionDbId, createdAt])
-  @@unique([tenantId, userId, idempotencyKey])
 }
 
 model CopilotMessage {
-  id            String           @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant           @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  userId        String
-  user          User             @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  sessionDbId   String
-  session       CopilotSession   @relation(fields: [sessionDbId], references: [id], onDelete: Cascade)
+  sessionDbId String
+  session     CopilotSession @relation(fields: [sessionDbId], references: [id], onDelete: Cascade)
 
-  role          CopilotMessageRole
-  text          String
-  metadata      Json?
+  role     CopilotMessageRole
+  text     String
+  metadata Json?
 
-  createdAt     DateTime         @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, userId, createdAt])
   @@index([sessionDbId, createdAt])
 }
 
 model WhatsAppConversation {
-  id            String          @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  customerId    String?
-  customer      Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
-  senderPhone   String
+  senderPhone String
 
-  lastIntent    WhatsAppIntent  @default(NONE)
+  lastIntent WhatsAppIntent @default(NONE)
 
-  state         Json?
+  state Json?
 
-  lastMessage   String?
-  lastResponse  String?
+  lastMessage  String?
+  lastResponse String?
 
-  messages      WhatsAppMessage[]
+  messages WhatsAppMessage[]
 
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, senderPhone])
   @@index([tenantId, senderPhone])
   @@index([tenantId, updatedAt])
   @@index([tenantId, customerId])
-  @@unique([tenantId, senderPhone])
 }
 
 model WhatsAppMessage {
-  id                String                   @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId          String
-  tenant            Tenant                   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  conversationId    String
-  conversation      WhatsAppConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  customerId        String?
-  customer          Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   externalMessageId String?
   senderPhone       String
   messageBody       String
   direction         WhatsAppMessageDirection
 
-  createdAt         DateTime                 @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId, createdAt])
   @@index([tenantId, senderPhone])
@@ -651,74 +741,92 @@ model WhatsAppMessage {
 }
 
 model Quote {
-  id            String       @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  customerId    String
-  customer      Customer     @relation(fields: [customerId], references: [id])
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
 
-  agentId       String?
-  agent         Agent?       @relation(fields: [agentId], references: [id])
+  agentId String?
+  agent   Agent?  @relation(fields: [agentId], references: [id])
 
-  quoteNumber   String
+  quoteNumber String
 
-  status        QuoteStatus  @default(DRAFT)
-  stockReserved Boolean      @default(false)
+  status        QuoteStatus @default(DRAFT)
+  stockReserved Boolean     @default(false)
 
-  subtotal        Decimal       @db.Decimal(12,2)
-  taxAmount       Decimal       @db.Decimal(12,2)
-  totalAmount     Decimal       @db.Decimal(12,2)
-  validUntil      DateTime?
-  discountAmount  Decimal       @default(0) @db.Decimal(12,2)
-  taxPercentage   Decimal       @default(0) @db.Decimal(5,2)
+  subtotal               Decimal       @db.Decimal(12, 2)
+  subtotalBeforeDiscount Decimal       @default(0) @db.Decimal(12, 2)
+  taxableAmount          Decimal       @default(0) @db.Decimal(12, 2)
+  taxAmount              Decimal       @db.Decimal(12, 2)
+  totalAmount            Decimal       @db.Decimal(12, 2)
+  validUntil             DateTime?
+  discountAmount         Decimal       @default(0) @db.Decimal(12, 2)
+  lineDiscountAmount     Decimal       @default(0) @db.Decimal(12, 2)
+  orderDiscountType      DiscountType?
+  orderDiscountValue     Decimal?      @db.Decimal(12, 2)
+  orderDiscountAmount    Decimal       @default(0) @db.Decimal(12, 2)
+  taxPercentage          Decimal       @default(0) @db.Decimal(5, 2)
 
-  agentCommissionType        CommissionType @default(PERCENTAGE)
-  agentCommissionPercentage  Decimal        @default(0) @db.Decimal(5,2)
-  agentCommissionAmount      Decimal        @default(0) @db.Decimal(12,2)
+  agentCommissionType       CommissionType @default(PERCENTAGE)
+  agentCommissionPercentage Decimal        @default(0) @db.Decimal(5, 2)
+  agentCommissionAmount     Decimal        @default(0) @db.Decimal(12, 2)
 
-  notes         String?
+  notes               String?
   recommendationRunId String?
   recommendationRun   RecommendationRun? @relation(fields: [recommendationRunId], references: [id], onDelete: SetNull)
-  metadata      Json?
+  metadata            Json?
 
-  items         QuoteItem[]
-  payments      Payment[]
-  productReturns ProductReturn[]
+  items                     QuoteItem[]
+  payments                  Payment[]
+  productReturns            ProductReturn[]
   copilotDraftConfirmations CopilotDraftConfirmation[]
+  priceOverrideApprovals    PriceOverrideApproval[]
+  agentCommissionAccruals   AgentCommissionAccrual[]
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, quoteNumber])
   @@index([tenantId])
   @@index([customerId])
   @@index([agentId])
   @@index([recommendationRunId])
-
-  @@unique([tenantId, quoteNumber])
 }
 
 model QuoteItem {
-  id            String      @id @default(uuid())
+  id String @id @default(uuid())
 
-  quoteId       String
-  quote         Quote       @relation(fields: [quoteId], references: [id])
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id])
 
-  productId     String
-  product       Product     @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  productName   String
+  productName String
 
-  quantity      Decimal     @db.Decimal(10,2)
+  quantity Decimal @db.Decimal(10, 2)
 
-  unitPrice     Decimal     @db.Decimal(12,2)
+  unitPrice          Decimal       @db.Decimal(12, 2)
+  baseUnitPrice      Decimal       @default(0) @db.Decimal(12, 2)
+  discountType       DiscountType?
+  discountPercentage Decimal?      @db.Decimal(5, 2)
+  discountAmount     Decimal       @default(0) @db.Decimal(12, 2)
+  netUnitPrice       Decimal       @default(0) @db.Decimal(12, 2)
 
-  lineTotal     Decimal     @db.Decimal(12,2)
+  lineTotal Decimal @db.Decimal(12, 2)
 
-  createdAt     DateTime    @default(now())
+  appliedDiscountRuleId String?
+  appliedDiscountRule   DiscountRule? @relation(fields: [appliedDiscountRuleId], references: [id], onDelete: SetNull)
+  discountReason        String?
+  discountApprovedById  String?
+
+  createdAt DateTime @default(now())
 
   @@index([quoteId])
+  @@index([appliedDiscountRuleId])
 }
 
 enum PurchaseOrderStatus {
@@ -730,38 +838,38 @@ enum PurchaseOrderStatus {
 }
 
 model PurchaseOrder {
-  id            String       @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  supplierId    String?
-  supplier      Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
-  orderNumber   String
-  status        PurchaseOrderStatus @default(DRAFT)
+  orderNumber String
+  status      PurchaseOrderStatus @default(DRAFT)
 
-  supplierName  String
-  supplierPhone String?
-  supplierEmail String?
+  supplierName      String
+  supplierPhone     String?
+  supplierEmail     String?
   supplierGstNumber String?
 
-  subtotal      Decimal      @db.Decimal(12,2)
-  taxAmount     Decimal      @db.Decimal(12,2)
-  totalAmount   Decimal      @db.Decimal(12,2)
+  subtotal    Decimal @db.Decimal(12, 2)
+  taxAmount   Decimal @db.Decimal(12, 2)
+  totalAmount Decimal @db.Decimal(12, 2)
 
-  expectedDate  DateTime?
-  receivedAt    DateTime?
+  expectedDate DateTime?
+  receivedAt   DateTime?
 
-  notes         String?
-  createdById   String?
+  notes       String?
+  createdById String?
 
-  items         PurchaseOrderItem[]
-  payments      Payment[]
+  items          PurchaseOrderItem[]
+  payments       Payment[]
   productReturns ProductReturn[]
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
@@ -770,22 +878,22 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id            String       @id @default(uuid())
+  id String @id @default(uuid())
 
   purchaseOrderId String
-  purchaseOrder  PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
-  productId      String
-  product        Product      @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  productName    String
-  quantity       Decimal      @db.Decimal(10,2)
-  unitCost       Decimal      @db.Decimal(12,2)
-  lineTotal      Decimal      @db.Decimal(12,2)
-  receivedQuantity Decimal    @default(0) @db.Decimal(10,2)
+  productName      String
+  quantity         Decimal @db.Decimal(10, 2)
+  unitCost         Decimal @db.Decimal(12, 2)
+  lineTotal        Decimal @db.Decimal(12, 2)
+  receivedQuantity Decimal @default(0) @db.Decimal(10, 2)
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([purchaseOrderId])
   @@index([productId])
@@ -813,32 +921,34 @@ enum PaymentStatus {
 }
 
 model Payment {
-  id            String       @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  quoteId       String?
-  quote         Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  quoteId String?
+  quote   Quote?  @relation(fields: [quoteId], references: [id], onDelete: SetNull)
 
   purchaseOrderId String?
-  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
 
-  customerId    String?
-  customer      Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
-  amount        Decimal      @db.Decimal(12,2)
-  direction     PaymentDirection
-  method        PaymentMethod
-  status        PaymentStatus @default(COMPLETED)
-  paymentDate   DateTime     @default(now())
+  amount      Decimal          @db.Decimal(12, 2)
+  direction   PaymentDirection
+  method      PaymentMethod
+  status      PaymentStatus    @default(COMPLETED)
+  paymentDate DateTime         @default(now())
 
   referenceNumber String?
-  note          String?
-  createdById   String?
+  note            String?
+  createdById     String?
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  commissionAccruals AgentCommissionAccrual[]
 
   @@index([tenantId])
   @@index([quoteId])
@@ -860,33 +970,35 @@ enum ProductReturnStatus {
 }
 
 model ProductReturn {
-  id            String       @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  returnNumber  String
-  type          ProductReturnType
-  status        ProductReturnStatus @default(REQUESTED)
+  returnNumber String
+  type         ProductReturnType
+  status       ProductReturnStatus @default(REQUESTED)
 
-  quoteId       String?
-  quote         Quote?       @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  quoteId String?
+  quote   Quote?  @relation(fields: [quoteId], references: [id], onDelete: SetNull)
 
   purchaseOrderId String?
-  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
 
-  customerId    String?
-  customer      Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
-  reason        String?
-  notes         String?
-  createdById   String?
-  processedAt   DateTime?
+  reason      String?
+  notes       String?
+  createdById String?
+  processedAt DateTime?
 
-  items         ProductReturnItem[]
+  items ProductReturnItem[]
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  commissionAccruals AgentCommissionAccrual[]
 
   @@unique([tenantId, returnNumber])
   @@index([tenantId])
@@ -895,75 +1007,298 @@ model ProductReturn {
 }
 
 model ProductReturnItem {
-  id            String       @id @default(uuid())
+  id String @id @default(uuid())
 
   productReturnId String
-  productReturn ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade)
+  productReturn   ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade)
 
-  productId      String
-  product        Product      @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  productName    String
-  quantity       Decimal      @db.Decimal(10,2)
-  unitPrice      Decimal      @db.Decimal(12,2)
-  lineTotal      Decimal      @db.Decimal(12,2)
-  restockToInventory Boolean  @default(true)
+  productName        String
+  quantity           Decimal @db.Decimal(10, 2)
+  unitPrice          Decimal @db.Decimal(12, 2)
+  lineTotal          Decimal @db.Decimal(12, 2)
+  restockToInventory Boolean @default(true)
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([productReturnId])
   @@index([productId])
 }
 
+model DiscountRule {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  code        String
+  name        String
+  description String?
+
+  scope DiscountScope
+  type  DiscountType
+
+  percentage Decimal? @db.Decimal(5, 2)
+  amount     Decimal? @db.Decimal(12, 2)
+  fixedPrice Decimal? @db.Decimal(12, 2)
+
+  productId      String?
+  product        Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  categoryId     String?
+  category       ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  customerId     String?
+  customer       Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerTypeId String?
+  customerType   CustomerType?    @relation(fields: [customerTypeId], references: [id], onDelete: SetNull)
+
+  minQuantity       Decimal? @db.Decimal(12, 2)
+  minOrderValue     Decimal? @db.Decimal(12, 2)
+  maxDiscountAmount Decimal? @db.Decimal(12, 2)
+
+  priority         Int     @default(100)
+  stackable        Boolean @default(false)
+  requiresApproval Boolean @default(false)
+
+  active        Boolean   @default(true)
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+
+  createdById  String?
+  approvedById String?
+  approvedAt   DateTime?
+
+  quoteItems QuoteItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([customerId])
+  @@index([customerTypeId])
+}
+
+model PriceOverrideApproval {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  quoteId String
+  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  quoteItemId String
+
+  requestedPrice      Decimal @db.Decimal(12, 2)
+  minimumAllowedPrice Decimal @db.Decimal(12, 2)
+
+  reason String
+  status ApprovalStatus @default(REQUESTED)
+
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, quoteId])
+  @@index([quoteItemId])
+  @@index([status])
+}
+
+model AgentCommissionRule {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  agentId String?
+  agent   Agent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  code String
+  name String
+
+  type  CommissionType
+  basis CommissionBasis
+
+  percentage    Decimal? @db.Decimal(5, 2)
+  fixedAmount   Decimal? @db.Decimal(12, 2)
+  perUnitAmount Decimal? @db.Decimal(12, 2)
+
+  productId  String?
+  product    Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  categoryId String?
+  category   ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  minSalesAmount Decimal? @db.Decimal(12, 2)
+  maxSalesAmount Decimal? @db.Decimal(12, 2)
+
+  priority      Int       @default(100)
+  active        Boolean   @default(true)
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+
+  accruals AgentCommissionAccrual[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+  @@index([agentId])
+  @@index([productId])
+  @@index([categoryId])
+}
+
+model AgentCommissionAccrual {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id])
+
+  quoteId String?
+  quote   Quote?  @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  productReturnId String?
+  productReturn   ProductReturn? @relation(fields: [productReturnId], references: [id], onDelete: SetNull)
+
+  commissionRuleId String?
+  commissionRule   AgentCommissionRule? @relation(fields: [commissionRuleId], references: [id], onDelete: SetNull)
+
+  basisAmount      Decimal  @db.Decimal(12, 2)
+  commissionRate   Decimal? @db.Decimal(5, 2)
+  commissionAmount Decimal  @db.Decimal(12, 2)
+
+  status CommissionStatus @default(PENDING)
+
+  earnedAt   DateTime?
+  approvedAt DateTime?
+  paidAmount Decimal   @default(0) @db.Decimal(12, 2)
+
+  calculationSnapshot Json
+  note                String?
+
+  reversalOfId String?
+  reversalOf   AgentCommissionAccrual?  @relation("CommissionReversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversals    AgentCommissionAccrual[] @relation("CommissionReversal")
+
+  settlementItems AgentCommissionSettlementItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, agentId])
+  @@index([quoteId])
+  @@index([paymentId])
+  @@index([productReturnId])
+  @@index([status])
+  @@index([commissionRuleId])
+  @@index([reversalOfId])
+}
+
+model AgentCommissionSettlement {
+  id String @id @default(uuid())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  agentId String
+  agent   Agent  @relation(fields: [agentId], references: [id])
+
+  settlementNumber String
+  periodFrom       DateTime
+  periodTo         DateTime
+
+  totalEarned Decimal @db.Decimal(12, 2)
+  deductions  Decimal @default(0) @db.Decimal(12, 2)
+  paidAmount  Decimal @db.Decimal(12, 2)
+
+  paymentMode      PaymentMethod?
+  paymentReference String?
+  paidAt           DateTime?
+
+  createdAt DateTime @default(now())
+
+  items AgentCommissionSettlementItem[]
+
+  @@unique([tenantId, settlementNumber])
+  @@index([tenantId, agentId])
+}
+
+model AgentCommissionSettlementItem {
+  id String @id @default(uuid())
+
+  settlementId String
+  settlement   AgentCommissionSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  accrualId String
+  accrual   AgentCommissionAccrual @relation(fields: [accrualId], references: [id], onDelete: Cascade)
+
+  amount Decimal @db.Decimal(12, 2)
+
+  @@unique([settlementId, accrualId])
+  @@index([accrualId])
+}
+
 model InventoryStock {
-  id            String      @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId      String
-  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  productId     String
-  product       Product     @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  onHand        Decimal     @default(0) @db.Decimal(12,2)
-  reserved      Decimal     @default(0) @db.Decimal(12,2)
-  reorderLevel  Decimal     @default(0) @db.Decimal(12,2)
+  onHand       Decimal @default(0) @db.Decimal(12, 2)
+  reserved     Decimal @default(0) @db.Decimal(12, 2)
+  reorderLevel Decimal @default(0) @db.Decimal(12, 2)
 
-  active        Boolean     @default(true)
+  active Boolean @default(true)
 
   ledgerEntries InventoryLedgerEntry[]
 
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, productId])
   @@index([tenantId])
   @@index([productId])
-  @@unique([tenantId, productId])
 }
 
 model InventoryLedgerEntry {
-  id             String                 @id @default(uuid())
+  id String @id @default(uuid())
 
-  tenantId       String
-  tenant         Tenant                 @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  stockId        String
-  stock          InventoryStock         @relation(fields: [stockId], references: [id])
+  stockId String
+  stock   InventoryStock @relation(fields: [stockId], references: [id])
 
-  productId      String
-  product        Product                @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  movementType   InventoryMovementType
-  quantity       Decimal                @db.Decimal(12,2)
+  movementType InventoryMovementType
+  quantity     Decimal               @db.Decimal(12, 2)
 
-  referenceType  InventoryReferenceType @default(MANUAL)
-  referenceId    String?
+  referenceType InventoryReferenceType @default(MANUAL)
+  referenceId   String?
 
-  note           String?
+  note String?
 
-  createdById    String?
+  createdById String?
 
-  createdAt      DateTime               @default(now())
+  createdAt DateTime @default(now())
 
   @@index([tenantId])
   @@index([productId])
@@ -987,19 +1322,19 @@ enum RequirementType {
 }
 
 model ProductCompatibility {
-  id                    String                    @id @default(uuid())
-  tenantId              String?                   // NULL = platform standard
-  sourceProductId       String
-  targetProductId       String
-  relationType          CompatibilityRelationType
-  reason                String?
-  priority              Int                       @default(2) // 1=critical, 2=important, 3=nice-to-have
-  active                Boolean                   @default(true)
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  id              String                    @id @default(uuid())
+  tenantId        String? // NULL = platform standard
+  sourceProductId String
+  targetProductId String
+  relationType    CompatibilityRelationType
+  reason          String?
+  priority        Int                       @default(2) // 1=critical, 2=important, 3=nice-to-have
+  active          Boolean                   @default(true)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
-  source                Product                   @relation("sourceCompatibility", fields: [sourceProductId], references: [id], onDelete: Cascade)
-  target                Product                   @relation("targetCompatibility", fields: [targetProductId], references: [id], onDelete: Cascade)
+  source Product @relation("sourceCompatibility", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  target Product @relation("targetCompatibility", fields: [targetProductId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, sourceProductId, targetProductId, relationType])
   @@index([sourceProductId])
@@ -1007,35 +1342,35 @@ model ProductCompatibility {
 }
 
 model SolutionTemplate {
-  id                    String                    @id @default(uuid())
-  tenantId              String?                   // NULL = platform standard
-  code                  String
-  name                  String
-  categoryId            String?
-  purpose               String?
-  description           String?
-  active                Boolean                   @default(true)
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  id          String   @id @default(uuid())
+  tenantId    String? // NULL = platform standard
+  code        String
+  name        String
+  categoryId  String?
+  purpose     String?
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  items                 SolutionTemplateItem[]
+  items SolutionTemplateItem[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
 }
 
 model SolutionTemplateItem {
-  id                    String                    @id @default(uuid())
-  solutionTemplateId    String
-  productCategoryId     String?
-  productId             String?
-  requirementType       RequirementType
-  defaultQuantity       Decimal                   @default(1) @db.Decimal(12,2)
-  reason                String?
-  priority              Int                       @default(2)
-  createdAt             DateTime                  @default(now())
+  id                 String          @id @default(uuid())
+  solutionTemplateId String
+  productCategoryId  String?
+  productId          String?
+  requirementType    RequirementType
+  defaultQuantity    Decimal         @default(1) @db.Decimal(12, 2)
+  reason             String?
+  priority           Int             @default(2)
+  createdAt          DateTime        @default(now())
 
-  template              SolutionTemplate          @relation(fields: [solutionTemplateId], references: [id], onDelete: Cascade)
+  template SolutionTemplate @relation(fields: [solutionTemplateId], references: [id], onDelete: Cascade)
 
   @@index([solutionTemplateId])
   @@index([productId])
@@ -1065,33 +1400,33 @@ enum RecommendationAction {
 }
 
 model DecisionRule {
-  id                    String              @id @default(uuid())
-  tenantId              String?             // NULL = platform standard rule, value = shop-specific override
+  id       String  @id @default(uuid())
+  tenantId String? // NULL = platform standard rule, value = shop-specific override
 
-  code                  String              // e.g. "BOREWELL_3HP_SINGLE_PHASE"
-  name                  String
-  description           String?
+  code        String // e.g. "BOREWELL_3HP_SINGLE_PHASE"
+  name        String
+  description String?
 
-  status                DecisionRuleStatus  @default(DRAFT)
-  version               Int                 @default(1)
+  status  DecisionRuleStatus @default(DRAFT)
+  version Int                @default(1)
 
   // Matching conditions (stored as JSON for flexibility)
-  conditions            Json                // e.g. { "depth": { "min": 300, "max": 350 }, "phase": "SINGLE" }
+  conditions Json // e.g. { "depth": { "min": 300, "max": 350 }, "phase": "SINGLE" }
 
   // What to recommend when matched
-  solutionTemplateId    String?             // Points to a SolutionTemplate to expand
-  overrideProducts      Json?               // Optional product overrides on top of template
+  solutionTemplateId String? // Points to a SolutionTemplate to expand
+  overrideProducts   Json? // Optional product overrides on top of template
 
-  priority              Int                 @default(10) // Lower = higher priority when multiple rules match
-  active                Boolean             @default(true)
+  priority Int     @default(10) // Lower = higher priority when multiple rules match
+  active   Boolean @default(true)
 
-  approvedById          String?             // Who approved this rule
-  approvedAt            DateTime?
+  approvedById String? // Who approved this rule
+  approvedAt   DateTime?
 
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  runs                  RecommendationRun[]
+  runs RecommendationRun[]
 
   @@unique([tenantId, code, version])
   @@index([tenantId])
@@ -1100,42 +1435,42 @@ model DecisionRule {
 }
 
 model RecommendationRun {
-  id                    String                    @id @default(uuid())
-  tenantId              String                    // Mandatory: every recommendation belongs to one shop
-  tenant                Tenant                    @relation(fields: [tenantId], references: [id])
+  id       String @id @default(uuid())
+  tenantId String // Mandatory: every recommendation belongs to one shop
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
   // Who triggered this recommendation
-  userId                String?
-  user                  User?                     @relation(fields: [userId], references: [id])
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
 
-  customerId            String?
-  customer              Customer?                 @relation(fields: [customerId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
 
-  copilotSessionId      String?
-  copilotSession        CopilotSession?           @relation(fields: [copilotSessionId], references: [id])
+  copilotSessionId String?
+  copilotSession   CopilotSession? @relation(fields: [copilotSessionId], references: [id])
 
   // Which rule fired (null if no match)
-  decisionRuleId        String?
-  decisionRule          DecisionRule?             @relation(fields: [decisionRuleId], references: [id])
+  decisionRuleId String?
+  decisionRule   DecisionRule? @relation(fields: [decisionRuleId], references: [id])
 
-  status                RecommendationRunStatus   @default(PENDING)
+  status RecommendationRunStatus @default(PENDING)
 
   // The raw query inputs
-  queryInputs           Json                      // e.g. { "depth": 325, "phase": "SINGLE", "budget": 15000 }
+  queryInputs Json // e.g. { "depth": 325, "phase": "SINGLE", "budget": 15000 }
 
   // Summary of result
-  totalCandidates       Int                       @default(0)
-  topScore              Decimal?                  @db.Decimal(5,2)
+  totalCandidates Int      @default(0)
+  topScore        Decimal? @db.Decimal(5, 2)
 
   // For debugging failed runs
-  errorMessage          String?
+  errorMessage String?
 
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  candidates            RecommendationCandidate[]
-  feedback              RecommendationFeedback?
-  quotes                Quote[]
+  candidates RecommendationCandidate[]
+  feedback   RecommendationFeedback?
+  quotes     Quote[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -1147,28 +1482,28 @@ model RecommendationRun {
 }
 
 model RecommendationCandidate {
-  id                    String              @id @default(uuid())
+  id String @id @default(uuid())
 
-  runId                 String
-  run                   RecommendationRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId String
+  run   RecommendationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
-  productId             String
-  product               Product             @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
-  rank                  Int                 // 1 = top recommendation
+  rank Int // 1 = top recommendation
 
-  totalScore            Decimal             @db.Decimal(5,2)
+  totalScore Decimal @db.Decimal(5, 2)
 
   // Deterministic score breakdown (stock + price + attributes + preference = total)
-  scoreStock            Decimal             @db.Decimal(5,2)
-  scorePriceMatch       Decimal             @db.Decimal(5,2)
-  scoreAttributeMatch   Decimal             @db.Decimal(5,2)
-  scorePreference       Decimal             @db.Decimal(5,2)
+  scoreStock          Decimal @db.Decimal(5, 2)
+  scorePriceMatch     Decimal @db.Decimal(5, 2)
+  scoreAttributeMatch Decimal @db.Decimal(5, 2)
+  scorePreference     Decimal @db.Decimal(5, 2)
 
   // Why this product was selected or deselected
-  selectedReason        String?             // For debugging: why this rank was assigned
+  selectedReason String? // For debugging: why this rank was assigned
 
-  createdAt             DateTime            @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([runId, productId])
   @@index([runId])
@@ -1177,25 +1512,25 @@ model RecommendationCandidate {
 }
 
 model RecommendationFeedback {
-  id                    String                  @id @default(uuid())
+  id String @id @default(uuid())
 
-  runId                 String                  @unique
-  run                   RecommendationRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId String            @unique
+  run   RecommendationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
-  action                RecommendationAction
+  action RecommendationAction
 
   // Which products were accepted/rejected
-  acceptedProductIds    Json                    @default("[]")
-  rejectedProductIds    Json                    @default("[]")
+  acceptedProductIds Json @default("[]")
+  rejectedProductIds Json @default("[]")
 
   // Free-text from shop owner
-  notes                 String?
+  notes String?
 
   // Who gave feedback
-  userId                String?
-  user                  User?                   @relation(fields: [userId], references: [id])
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
 
-  createdAt             DateTime                @default(now())
+  createdAt DateTime @default(now())
 
   @@index([runId])
   @@index([userId])
