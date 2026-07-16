@@ -90,6 +90,22 @@ describe('Commercial Guardrails E2E', () => {
     const totalAmount = Number(quoteResponse.body.totalAmount);
 
     await request(app.getHttpServer())
+      .patch(`/api/quotes/${quoteId}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        status: 'APPROVED',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/quotes/${quoteId}/status`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        status: 'INVOICED',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
       .post('/api/payments')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({

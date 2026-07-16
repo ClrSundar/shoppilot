@@ -763,6 +763,7 @@ model Quote {
   taxAmount              Decimal       @db.Decimal(12, 2)
   totalAmount            Decimal       @db.Decimal(12, 2)
   validUntil             DateTime?
+  invoicedAt             DateTime?
   discountAmount         Decimal       @default(0) @db.Decimal(12, 2)
   lineDiscountAmount     Decimal       @default(0) @db.Decimal(12, 2)
   orderDiscountType      DiscountType?

@@ -72,6 +72,11 @@ export default function Dashboard() {
     queryFn: dashboardService.getLowStockProducts,
   });
 
+  const { data: outstandingPayments } = useQuery({
+    queryKey: ['dashboard-outstanding-payments'],
+    queryFn: dashboardService.getOutstandingPayments,
+  });
+
   return (
     <Box>
       <Card
@@ -186,6 +191,49 @@ export default function Dashboard() {
           </Stack>
         </Alert>
       )}
+
+      {outstandingPayments && outstandingPayments.customerCountWithOutstanding > 0 ? (
+        <Alert
+          severity="warning"
+          sx={{ mb: 3, borderRadius: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => router.push('/payments')}
+            >
+              Record Payment
+            </Button>
+          }
+        >
+          <AlertTitle>Outstanding Payments</AlertTitle>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Total Outstanding: ₹{outstandingPayments.totalOutstanding.toFixed(2)} across {outstandingPayments.customerCountWithOutstanding} customer(s)
+          </Typography>
+          <Stack spacing={0.5}>
+            {outstandingPayments.topCustomers.slice(0, 5).map((row) => (
+              <Stack
+                key={row.customerId}
+                direction="row"
+                sx={{ justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <Typography variant="body2">
+                  {row.customerName} - ₹{row.outstanding.toFixed(2)}
+                </Typography>
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={() =>
+                    router.push(`/customers?ledgerCustomerId=${row.customerId}`)
+                  }
+                >
+                  View Ledger
+                </Button>
+              </Stack>
+            ))}
+          </Stack>
+        </Alert>
+      ) : null}
 
       <Typography variant="h5" sx={{ mb: 2 }}>
         Business Modules

@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { CustomerAccountsService } from '../customer-accounts/customer-accounts.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly customerAccountsService: CustomerAccountsService,
+  ) {}
 
   async getMetrics(tenantId: string) {
     const [categories, products, customers, quotes] = await Promise.all([
@@ -84,6 +88,18 @@ export class DashboardService {
           }
         : null,
       activeUsers: users,
+    };
+  }
+
+  async getOutstandingPayments(tenantId: string) {
+    const outstanding = await this.customerAccountsService.getOutstandingCustomers(
+      tenantId,
+    );
+
+    return {
+      totalOutstanding: outstanding.totalOutstanding,
+      customerCountWithOutstanding: outstanding.customerCountWithOutstanding,
+      topCustomers: outstanding.rows.slice(0, 8),
     };
   }
 }

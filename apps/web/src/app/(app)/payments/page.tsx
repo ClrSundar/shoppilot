@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
+  Alert,
   Box,
   Button,
   Dialog,
@@ -22,10 +24,11 @@ import { paymentsService, Payment, PaymentDirection, PaymentMethod } from '@/ser
 import { purchasesService } from '@/services/purchases.service';
 import { quotesService } from '@/services/quotes.service';
 
-const methods: PaymentMethod[] = ['CASH', 'UPI', 'CARD', 'BANK_TRANSFER', 'CHEQUE', 'OTHER'];
+const methods: PaymentMethod[] = ['CASH', 'UPI', 'CARD', 'BANK_TRANSFER'];
 const directions: PaymentDirection[] = ['RECEIVED', 'PAID'];
 
 export default function PaymentsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { toast, showToast, closeToast } = useAppToast();
 
@@ -40,7 +43,10 @@ export default function PaymentsPage() {
 
   const { data: payments = [], isLoading } = useQuery({
     queryKey: ['payments'],
-    queryFn: paymentsService.getAll,
+    queryFn: () =>
+      paymentsService.getAll({
+        direction: 'RECEIVED',
+      }),
   });
 
   const { data: quotes = [] } = useQuery({
@@ -52,6 +58,26 @@ export default function PaymentsPage() {
     queryKey: ['purchases'],
     queryFn: purchasesService.getAll,
   });
+
+  const selectedQuote = quoteId
+    ? quotes.find((quote) => quote.id === quoteId)
+    : null;
+
+  const selectedQuoteTotal = selectedQuote ? Number(selectedQuote.totalAmount) : 0;
+  const selectedQuoteReceived = selectedQuote
+    ? payments
+        .filter(
+          (payment) =>
+            payment.quote?.id === selectedQuote.id &&
+            payment.direction === 'RECEIVED' &&
+            payment.status === 'COMPLETED',
+        )
+        .reduce((sum, payment) => sum + Number(payment.amount), 0)
+    : 0;
+  const selectedQuoteOutstanding = Math.max(
+    selectedQuoteTotal - selectedQuoteReceived,
+    0,
+  );
 
   const createMutation = useMutation({
     mutationFn: paymentsService.create,
@@ -93,10 +119,45 @@ export default function PaymentsPage() {
       flex: 1,
       valueGetter: (_value, row) => row.referenceNumber || row.quote?.quoteNumber || row.purchaseOrder?.orderNumber || '-',
     },
+    {
+      field: 'customer',
+      headerName: 'Customer',
+      width: 220,
+      valueGetter: (_value, row) => row.customer?.name ?? '-',
+    },
     { field: 'status', headerName: 'Status', width: 120 },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 160,
+      sortable: false,
+      renderCell: ({ row }) =>
+        row.customer?.id ? (
+          <Button
+            size="small"
+            onClick={() => router.push(`/customers?ledgerCustomerId=${row.customer?.id}`)}
+          >
+            View Ledger
+          </Button>
+        ) : (
+          <span>-</span>
+        ),
+    },
   ];
 
   const handleCreate = () => {
+    if (direction === 'RECEIVED' && !quoteId) {
+      showToast('Received payment must be linked to an invoiced quote', 'error');
+      return;
+    }
+
+    if (direction === 'RECEIVED' && selectedQuote) {
+      if (Number(amount) > selectedQuoteOutstanding) {
+        showToast('Amount exceeds outstanding for selected quote', 'error');
+        return;
+      }
+    }
+
     createMutation.mutate({
       amount: Number(amount),
       method,
@@ -168,6 +229,12 @@ export default function PaymentsPage() {
               ))}
             </TextField>
 
+            {direction === 'RECEIVED' ? (
+              <Alert severity="info">
+                For V1, received customer payments must be linked to an invoiced/dispatched quote.
+              </Alert>
+            ) : null}
+
             <TextField
               select
               label="Related Quote (Optional)"
@@ -178,10 +245,16 @@ export default function PaymentsPage() {
               <MenuItem value="">None</MenuItem>
               {quotes.map((quote) => (
                 <MenuItem key={quote.id} value={quote.id}>
-                  {quote.quoteNumber}
+                  {quote.quoteNumber} • {quote.status} • ₹{Number(quote.totalAmount).toFixed(2)}
                 </MenuItem>
               ))}
             </TextField>
+
+            {selectedQuote ? (
+              <Alert severity="success">
+                Quote Total: ₹{selectedQuoteTotal.toFixed(2)} | Received: ₹{selectedQuoteReceived.toFixed(2)} | Outstanding: ₹{selectedQuoteOutstanding.toFixed(2)}
+              </Alert>
+            ) : null}
 
             <TextField
               select

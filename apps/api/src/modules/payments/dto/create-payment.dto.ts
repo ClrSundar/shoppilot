@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,6 +10,13 @@ import {
   Min,
 } from 'class-validator';
 import { PaymentDirection, PaymentMethod, PaymentStatus } from '@prisma/client';
+
+const allowedPaymentMethods: PaymentMethod[] = [
+  PaymentMethod.CASH,
+  PaymentMethod.UPI,
+  PaymentMethod.BANK_TRANSFER,
+  PaymentMethod.CARD,
+];
 
 export class CreatePaymentDto {
   @IsOptional()
@@ -32,7 +40,7 @@ export class CreatePaymentDto {
   @IsEnum(PaymentDirection)
   direction?: PaymentDirection;
 
-  @IsEnum(PaymentMethod)
+  @IsIn(allowedPaymentMethods)
   method: PaymentMethod;
 
   @IsOptional()

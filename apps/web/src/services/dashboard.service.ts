@@ -7,6 +7,19 @@ export type DashboardMetrics = {
   quotes: number;
 };
 
+export type DashboardOutstanding = {
+  totalOutstanding: number;
+  customerCountWithOutstanding: number;
+  topCustomers: Array<{
+    customerId: string;
+    customerName: string;
+    customerPhone: string | null;
+    totalInvoiced: number;
+    totalPaid: number;
+    outstanding: number;
+  }>;
+};
+
 export type LowStockProduct = {
   id: string;
   productId: string;
@@ -28,6 +41,11 @@ export const dashboardService = {
 
   getLowStockProducts: async () => {
     const res = await api.get<LowStockProduct[]>('/dashboard/low-stock');
+    return res.data;
+  },
+
+  getOutstandingPayments: async () => {
+    const res = await api.get<DashboardOutstanding>('/dashboard/outstanding-payments');
     return res.data;
   },
 };

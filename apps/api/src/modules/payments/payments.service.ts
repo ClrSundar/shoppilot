@@ -8,6 +8,7 @@ import { PaymentDirection, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CommissionsService } from '../commissions/commissions.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { ListPaymentsDto } from './dto/list-payments.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -32,6 +33,8 @@ export class PaymentsService {
     }
 
     let quoteTotalAmount: number | null = null;
+    let linkedQuoteCustomerId: string | null = null;
+    let quoteStatus: string | null = null;
     let purchaseOrderTotalAmount: number | null = null;
 
     if (dto.quoteId) {
@@ -44,6 +47,7 @@ export class PaymentsService {
           id: true,
           customerId: true,
           totalAmount: true,
+          status: true,
         },
       });
 
@@ -52,7 +56,9 @@ export class PaymentsService {
       }
 
       linkedQuoteId = quote.id;
+      linkedQuoteCustomerId = quote.customerId;
       linkedCustomerId = linkedCustomerId ?? quote.customerId;
+      quoteStatus = quote.status;
       quoteTotalAmount = Number(quote.totalAmount);
     }
 
@@ -96,12 +102,34 @@ export class PaymentsService {
       dto.direction ??
       (linkedQuoteId ? PaymentDirection.RECEIVED : PaymentDirection.PAID);
 
+    if (direction === PaymentDirection.RECEIVED && !linkedQuoteId) {
+      throw new BadRequestException(
+        'Received customer payments must be linked to a quote',
+      );
+    }
+
     if (linkedQuoteId && direction !== PaymentDirection.RECEIVED) {
       throw new BadRequestException('Quote payments must use RECEIVED direction');
     }
 
     if (linkedPurchaseOrderId && direction !== PaymentDirection.PAID) {
       throw new BadRequestException('Purchase order payments must use PAID direction');
+    }
+
+    if (linkedQuoteId && direction === PaymentDirection.RECEIVED) {
+      if (quoteStatus !== 'INVOICED' && quoteStatus !== 'DISPATCHED') {
+        throw new BadRequestException(
+          'Quote must be INVOICED before recording a customer payment',
+        );
+      }
+    }
+
+    if (linkedQuoteCustomerId && linkedCustomerId && linkedCustomerId !== linkedQuoteCustomerId) {
+      throw new BadRequestException('Payment customer must match quote customer');
+    }
+
+    if (linkedQuoteCustomerId) {
+      linkedCustomerId = linkedQuoteCustomerId;
     }
 
     const amount = Number(dto.amount);
@@ -208,11 +236,25 @@ export class PaymentsService {
     return payment;
   }
 
-  async findAll(tenantId: string) {
+  async findAll(tenantId: string, query: ListPaymentsDto) {
+    const where: Prisma.PaymentWhereInput = {
+      tenantId,
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(query.quoteId ? { quoteId: query.quoteId } : {}),
+      ...(query.direction ? { direction: query.direction } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.fromDate || query.toDate
+        ? {
+            paymentDate: {
+              ...(query.fromDate ? { gte: new Date(query.fromDate) } : {}),
+              ...(query.toDate ? { lte: new Date(query.toDate) } : {}),
+            },
+          }
+        : {}),
+    };
+
     return this.prisma.payment.findMany({
-      where: {
-        tenantId,
-      },
+      where,
       include: {
         quote: {
           select: {
@@ -236,6 +278,7 @@ export class PaymentsService {
       orderBy: {
         paymentDate: 'desc',
       },
+      ...(query.limit ? { take: query.limit } : {}),
     });
   }
 

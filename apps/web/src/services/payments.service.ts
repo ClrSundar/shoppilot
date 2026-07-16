@@ -1,7 +1,7 @@
 import { api } from '@/lib/api';
 
 export type PaymentDirection = 'RECEIVED' | 'PAID';
-export type PaymentMethod = 'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER';
+export type PaymentMethod = 'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER';
 export type PaymentStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export type Payment = {
@@ -40,9 +40,21 @@ export type CreatePaymentPayload = {
   note?: string;
 };
 
+export type ListPaymentsQuery = {
+  customerId?: string;
+  quoteId?: string;
+  direction?: PaymentDirection;
+  status?: PaymentStatus;
+  fromDate?: string;
+  toDate?: string;
+  limit?: number;
+};
+
 export const paymentsService = {
-  getAll: async () => {
-    const res = await api.get<Payment[]>('/payments');
+  getAll: async (query?: ListPaymentsQuery) => {
+    const res = await api.get<Payment[]>('/payments', {
+      params: query,
+    });
     return res.data;
   },
 

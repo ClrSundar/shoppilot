@@ -11,6 +11,12 @@ export type Customer = {
   active: boolean;
 };
 
+export type CustomerLedgerSummary = {
+  totalInvoiced: number;
+  totalReceived: number;
+  outstanding: number;
+};
+
 export type CreateCustomerPayload = {
   name: string;
   phone?: string;
@@ -52,6 +58,23 @@ export const customersService = {
     const formData = new FormData();
     formData.append('file', file);
     const res = await api.post<BulkUploadResult>('/customers/bulk-upload', formData);
+    return res.data;
+  },
+
+  getOutstanding: async () => {
+    const res = await api.get<{
+      totalOutstanding: number;
+      customerCountWithOutstanding: number;
+      rows: Array<{
+        customerId: string;
+        customerName: string;
+        customerPhone: string | null;
+        totalInvoiced: number;
+        totalPaid: number;
+        outstanding: number;
+      }>;
+    }>('/customer-accounts/outstanding/list');
+
     return res.data;
   },
 };

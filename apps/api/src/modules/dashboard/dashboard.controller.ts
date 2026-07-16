@@ -27,4 +27,9 @@ export class DashboardController {
   getLowStockProducts(@CurrentUser() user: JwtPayload) {
     return this.dashboardService.getLowStockProducts(user.tenantId);
   }
+
+  @Get('outstanding-payments')
+  getOutstandingPayments(@CurrentUser() user: JwtPayload) {
+    return this.dashboardService.getOutstandingPayments(user.tenantId);
+  }
 }

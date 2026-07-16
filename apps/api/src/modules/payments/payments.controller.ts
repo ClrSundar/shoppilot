@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +15,7 @@ import type { JwtPayload } from '../../common/types/jwt-payload.type';
 
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { ListPaymentsDto } from './dto/list-payments.dto';
 
 @ApiTags('Payments')
 @ApiBearerAuth('JWT-auth')
@@ -21,8 +30,8 @@ export class PaymentsController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: JwtPayload) {
-    return this.paymentsService.findAll(user.tenantId);
+  findAll(@CurrentUser() user: JwtPayload, @Query() query: ListPaymentsDto) {
+    return this.paymentsService.findAll(user.tenantId, query);
   }
 
   @Get(':id')

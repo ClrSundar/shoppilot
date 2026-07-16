@@ -28,6 +28,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { CommissionsModule } from './modules/commissions/commissions.module';
 import { CustomerTypesModule } from './modules/customer-types/customer-types.module';
+import { CustomerAccountsModule } from './modules/customer-accounts/customer-accounts.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { CustomerTypesModule } from './modules/customer-types/customer-types.mod
     PricingModule,
     CommissionsModule,
     CustomerTypesModule,
+    CustomerAccountsModule,
   ],
   providers: [
     {

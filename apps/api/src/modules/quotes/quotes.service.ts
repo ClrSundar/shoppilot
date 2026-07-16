@@ -381,8 +381,6 @@ export class QuotesService {
   }
 
   async create(tenantId: string, dto: CreateQuoteDto, actor?: PricingActor) {
-    const quoteNumber = await this.generateQuoteNumber(tenantId);
-
     const pricing = await this.pricingService.calculateQuotePricing(
       tenantId,
       dto,
@@ -395,72 +393,81 @@ export class QuotesService {
       agentCommissionAmount,
     } = await this.resolveAgentCommission(tenantId, dto, pricing.taxableAmount);
 
-    const quote = await this.prisma.quote.create({
-      data: {
-        tenantId,
-        customerId: dto.customerId,
-        agentId,
-        quoteNumber,
-        subtotal: new Prisma.Decimal(pricing.subtotal),
-        subtotalBeforeDiscount: new Prisma.Decimal(pricing.subtotalBeforeDiscount),
-        taxableAmount: new Prisma.Decimal(pricing.taxableAmount),
-        taxAmount: new Prisma.Decimal(pricing.taxAmount),
-        totalAmount: new Prisma.Decimal(pricing.totalAmount),
-        validUntil: this.getQuoteValidUntilDate(),
-        discountAmount: new Prisma.Decimal(pricing.totalDiscountAmount),
-        lineDiscountAmount: new Prisma.Decimal(pricing.lineDiscountAmount),
-        orderDiscountType: pricing.orderDiscountType,
-        orderDiscountValue:
-          pricing.orderDiscountValue !== null
-            ? new Prisma.Decimal(pricing.orderDiscountValue)
-            : null,
-        orderDiscountAmount: new Prisma.Decimal(pricing.orderDiscountAmount),
-        agentCommissionPercentage: new Prisma.Decimal(agentCommissionPercentage),
-        agentCommissionAmount: new Prisma.Decimal(agentCommissionAmount),
-        notes: dto.notes,
-        recommendationRunId: dto.recommendationRunId,
-        metadata: {
-          ...this.parseQuoteMetadata(dto.metadata),
-          pricing: pricing.metadata,
-        } as Prisma.InputJsonValue,
-        items: {
-          create: pricing.quoteItems.map((item) => ({
-            productId: item.productId,
-            productName: item.productName,
-            quantity: new Prisma.Decimal(item.quantity),
-            unitPrice: new Prisma.Decimal(item.unitPrice),
-            baseUnitPrice: new Prisma.Decimal(item.baseUnitPrice),
-            discountType: item.discountType,
-            discountPercentage:
-              item.discountPercentage !== null
-                ? new Prisma.Decimal(item.discountPercentage)
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const quoteNumber = await this.generateQuoteNumber(tenantId);
+
+      try {
+        return await this.prisma.quote.create({
+          data: {
+            tenantId,
+            customerId: dto.customerId,
+            agentId,
+            quoteNumber,
+            subtotal: new Prisma.Decimal(pricing.subtotal),
+            subtotalBeforeDiscount: new Prisma.Decimal(pricing.subtotalBeforeDiscount),
+            taxableAmount: new Prisma.Decimal(pricing.taxableAmount),
+            taxAmount: new Prisma.Decimal(pricing.taxAmount),
+            totalAmount: new Prisma.Decimal(pricing.totalAmount),
+            validUntil: this.getQuoteValidUntilDate(),
+            discountAmount: new Prisma.Decimal(pricing.totalDiscountAmount),
+            lineDiscountAmount: new Prisma.Decimal(pricing.lineDiscountAmount),
+            orderDiscountType: pricing.orderDiscountType,
+            orderDiscountValue:
+              pricing.orderDiscountValue !== null
+                ? new Prisma.Decimal(pricing.orderDiscountValue)
                 : null,
-            discountAmount: new Prisma.Decimal(item.discountAmount),
-            netUnitPrice: new Prisma.Decimal(item.netUnitPrice),
-            lineTotal: new Prisma.Decimal(item.lineTotal),
-            discountReason: item.discountReason,
-          })),
-        },
-      },
-      include: {
-        customer: true,
-        agent: true,
-        items: {
-          orderBy: {
-            createdAt: 'asc',
+            orderDiscountAmount: new Prisma.Decimal(pricing.orderDiscountAmount),
+            agentCommissionPercentage: new Prisma.Decimal(agentCommissionPercentage),
+            agentCommissionAmount: new Prisma.Decimal(agentCommissionAmount),
+            notes: dto.notes,
+            recommendationRunId: dto.recommendationRunId,
+            metadata: {
+              ...this.parseQuoteMetadata(dto.metadata),
+              pricing: pricing.metadata,
+            } as Prisma.InputJsonValue,
+            items: {
+              create: pricing.quoteItems.map((item) => ({
+                productId: item.productId,
+                productName: item.productName,
+                quantity: new Prisma.Decimal(item.quantity),
+                unitPrice: new Prisma.Decimal(item.unitPrice),
+                baseUnitPrice: new Prisma.Decimal(item.baseUnitPrice),
+                discountType: item.discountType,
+                discountPercentage:
+                  item.discountPercentage !== null
+                    ? new Prisma.Decimal(item.discountPercentage)
+                    : null,
+                discountAmount: new Prisma.Decimal(item.discountAmount),
+                netUnitPrice: new Prisma.Decimal(item.netUnitPrice),
+                lineTotal: new Prisma.Decimal(item.lineTotal),
+                discountReason: item.discountReason,
+              })),
+            },
           },
-        },
-      },
-    });
+          include: {
+            customer: true,
+            agent: true,
+            items: {
+              orderBy: {
+                createdAt: 'asc',
+              },
+            },
+          },
+        });
+      } catch (error) {
+        const isUniqueConstraintError =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { code?: string }).code === 'P2002';
 
-    await this.createPriceOverrideApprovals(
-      tenantId,
-      quote.id,
-      quote.items.map((item) => ({ id: item.id })),
-      pricing.pendingApprovals,
-    );
+        if (!isUniqueConstraintError || attempt === 4) {
+          throw error;
+        }
+      }
+    }
 
-    return quote;
+    throw new Error('Failed to create quote after retrying quote number allocation');
   }
 
   async findAll(tenantId: string) {
@@ -474,8 +481,8 @@ export class QuotesService {
         customer: true,
         agent: true,
         items: {
-          include: {
-            product: true,
+          orderBy: {
+            createdAt: 'asc',
           },
         },
       },
@@ -488,7 +495,7 @@ export class QuotesService {
   async findOne(tenantId: string, quoteId: string) {
     await this.expireOverdueQuotes(tenantId);
 
-    return this.prisma.quote.findFirst({
+    const quote = await this.prisma.quote.findFirst({
       where: {
         id: quoteId,
         tenantId,
@@ -500,9 +507,18 @@ export class QuotesService {
           include: {
             product: true,
           },
+          orderBy: {
+            createdAt: 'asc',
+          },
         },
       },
     });
+
+    if (!quote) {
+      throw new BadRequestException('Quote not found');
+    }
+
+    return quote;
   }
 
   async updateStatus(
@@ -587,6 +603,9 @@ export class QuotesService {
         data: {
           status: status as never,
           stockReserved,
+          ...(status === 'INVOICED' && quote.invoicedAt === null
+            ? { invoicedAt: new Date() }
+            : {}),
         },
         include: {
           customer: true,

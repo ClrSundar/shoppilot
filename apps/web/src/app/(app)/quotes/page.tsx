@@ -1028,8 +1028,10 @@ export default function QuotesPage() {
                   anchorEl={actionsAnchorEl}
                   open={Boolean(actionsAnchorEl)}
                   onClose={() => setActionsAnchorEl(null)}
-                  MenuListProps={{
-                    onMouseLeave: () => setActionsAnchorEl(null),
+                  slotProps={{
+                    list: {
+                      onMouseLeave: () => setActionsAnchorEl(null),
+                    },
                   }}
                 >
                   <MenuItem

@@ -1,7 +1,9 @@
 'use client';
 
 import { ChangeEvent, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  Alert,
   Box,
   Button,
   Dialog,
@@ -18,8 +20,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppToast } from '@/components/common/AppToast';
 import { useAppToast } from '@/hooks/use-app-toast';
 import { Customer, customersService } from '@/services/customers.service';
+import { customerAccountsService } from '@/services/customer-accounts.service';
 
 export default function CustomersPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -33,12 +38,46 @@ export default function CustomersPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerCustomerId, setLedgerCustomerId] = useState('');
   const { toast, showToast, closeToast } = useAppToast();
 
   const { data: customers = [], isLoading } = useQuery({
     queryKey: ['customers'],
     queryFn: customersService.getAll,
   });
+
+  const { data: outstanding } = useQuery({
+    queryKey: ['customer-accounts', 'outstanding'],
+    queryFn: customerAccountsService.getOutstanding,
+  });
+
+  const { data: ledgerSummary } = useQuery({
+    queryKey: ['customer-accounts', ledgerCustomerId, 'summary'],
+    queryFn: () => customerAccountsService.getSummary(ledgerCustomerId),
+    enabled: ledgerOpen && Boolean(ledgerCustomerId),
+  });
+
+  const { data: ledger } = useQuery({
+    queryKey: ['customer-accounts', ledgerCustomerId, 'ledger'],
+    queryFn: () => customerAccountsService.getLedger(ledgerCustomerId),
+    enabled: ledgerOpen && Boolean(ledgerCustomerId),
+  });
+
+  const outstandingByCustomer = new Map(
+    (outstanding?.rows ?? []).map((row) => [row.customerId, row]),
+  );
+
+  const requestedLedgerCustomerId = searchParams.get('ledgerCustomerId');
+
+  if (
+    requestedLedgerCustomerId &&
+    !ledgerOpen &&
+    customers.some((customer) => customer.id === requestedLedgerCustomerId)
+  ) {
+    setLedgerCustomerId(requestedLedgerCustomerId);
+    setLedgerOpen(true);
+  }
 
   const createMutation = useMutation({
     mutationFn: customersService.create,
@@ -58,11 +97,35 @@ export default function CustomersPage() {
     { field: 'address', headerName: 'Address', flex: 1 },
     { field: 'gstNumber', headerName: 'GST Number', flex: 1 },
     {
+      field: 'outstanding',
+      headerName: 'Outstanding',
+      width: 140,
+      valueGetter: (_value, row) =>
+        (outstandingByCustomer.get(row.id)?.outstanding ?? 0).toFixed(2),
+    },
+    {
       field: 'actions',
       headerName: 'Actions',
-      width: 180,
+      width: 300,
       renderCell: (params) => (
         <Stack direction="row" spacing={1}>
+          <Button
+            size="small"
+            onClick={() => {
+              setLedgerCustomerId(params.row.id);
+              setLedgerOpen(true);
+            }}
+          >
+            Ledger
+          </Button>
+
+          <Button
+            size="small"
+            onClick={() => router.push('/payments')}
+          >
+            Record Payment
+          </Button>
+
           <Button size="small" onClick={() => handleEdit(params.row)}>
             Edit
           </Button>
@@ -325,6 +388,63 @@ export default function CustomersPage() {
             disabled={deleteMutation.isPending}
           >
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={ledgerOpen}
+        onClose={() => setLedgerOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>Customer Ledger</DialogTitle>
+        <DialogContent>
+          {ledgerSummary ? (
+            <Stack spacing={1.5} sx={{ mt: 1 }}>
+              <Alert severity="info">
+                Customer: {ledgerSummary.customer.name} | Invoiced: ₹{ledgerSummary.totals.totalInvoiced.toFixed(2)} | Received: ₹{ledgerSummary.totals.totalReceived.toFixed(2)} | Outstanding: ₹{ledgerSummary.totals.outstanding.toFixed(2)}
+              </Alert>
+
+              <Box sx={{ maxHeight: 360, overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 1.5 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: 8 }}>Date</th>
+                      <th style={{ textAlign: 'left', padding: 8 }}>Type</th>
+                      <th style={{ textAlign: 'left', padding: 8 }}>Ref</th>
+                      <th style={{ textAlign: 'right', padding: 8 }}>Debit</th>
+                      <th style={{ textAlign: 'right', padding: 8 }}>Credit</th>
+                      <th style={{ textAlign: 'right', padding: 8 }}>Running</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ledger?.transactions ?? []).map((row) => (
+                      <tr key={`${row.type}-${row.referenceId}`}>
+                        <td style={{ padding: 8 }}>{new Date(row.date).toLocaleDateString()}</td>
+                        <td style={{ padding: 8 }}>{row.type}</td>
+                        <td style={{ padding: 8 }}>{row.referenceNumber}</td>
+                        <td style={{ padding: 8, textAlign: 'right' }}>{row.debit.toFixed(2)}</td>
+                        <td style={{ padding: 8, textAlign: 'right' }}>{row.credit.toFixed(2)}</td>
+                        <td style={{ padding: 8, textAlign: 'right', fontWeight: 600 }}>{row.runningBalance.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Box>
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLedgerOpen(false)}>Close</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setLedgerOpen(false);
+              router.push('/payments');
+            }}
+          >
+            Record Payment
           </Button>
         </DialogActions>
       </Dialog>
