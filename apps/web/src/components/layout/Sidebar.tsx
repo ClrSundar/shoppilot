@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
@@ -12,21 +13,41 @@ type SidebarProps = {
 
 const navigationItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '⌂' },
-  { href: '/categories', label: 'Categories', icon: '◫' },
-  { href: '/products', label: 'Products', icon: '▦' },
-  { href: '/inventory', label: 'Inventory', icon: '◌' },
-  { href: '/customers', label: 'Customers', icon: '☺' },
-  { href: '/suppliers', label: 'Suppliers', icon: 'SV' },
-  { href: '/agents', label: 'Agents', icon: '♢' },
-  { href: '/settings/agent-types', label: 'Agent Types', icon: '⚙' },
   { href: '/quotes', label: 'Quotes', icon: '✎' },
-  { href: '/purchases', label: 'Purchases', icon: 'PO' },
-  { href: '/payments', label: 'Payments', icon: '$' },
-  { href: '/returns', label: 'Returns', icon: 'RT' },
-  { href: '/copilot', label: 'Copilot', icon: '⚑' },
-  { href: '/team', label: 'Team', icon: '⟡' },
-  { href: '/billing', label: 'Billing', icon: '$' },
 ];
+
+const moreNavigationGroups = [
+  {
+    title: 'Operations',
+    items: [
+      { href: '/customers', label: 'Customers', icon: '☺' },
+      { href: '/payments', label: 'Payments', icon: '$' },
+      { href: '/inventory', label: 'Inventory', icon: '◌' },
+      { href: '/inventory/bulk-upload', label: 'Bulk Upload', icon: '⇪' },
+      { href: '/returns', label: 'Returns', icon: 'RT' },
+    ],
+  },
+  {
+    title: 'Catalog',
+    items: [
+      { href: '/products', label: 'Products', icon: '▦' },
+      { href: '/categories', label: 'Categories', icon: '◫' },
+      { href: '/suppliers', label: 'Suppliers', icon: 'SV' },
+      { href: '/purchases', label: 'Purchases', icon: 'PO' },
+    ],
+  },
+  {
+    title: 'People & Settings',
+    items: [
+      { href: '/agents', label: 'Agents', icon: '♢' },
+      { href: '/settings/agent-types', label: 'Agent Types', icon: '⚙' },
+      { href: '/team', label: 'Team', icon: '⟡' },
+      { href: '/billing', label: 'Billing', icon: '$' },
+      { href: '/copilot', label: 'Copilot', icon: '⚑' },
+      { href: '/recommendations-history', label: 'Recommendations', icon: '⋯' },
+    ],
+  },
+] as const;
 
 export function Sidebar({ isMobileOpen, onNavigate, onClose }: SidebarProps) {
   const pathname = usePathname();
@@ -113,6 +134,24 @@ function SidebarContent({
   onClose: () => void;
   onLogout: () => void;
 }) {
+  const isMoreActive = useMemo(
+    () =>
+      moreNavigationGroups.some((group) =>
+        group.items.some(
+          (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+        ),
+      ),
+    [pathname],
+  );
+
+  const [isMoreOpen, setIsMoreOpen] = useState(isMoreActive);
+
+  useEffect(() => {
+    if (isMoreActive) {
+      setIsMoreOpen(true);
+    }
+  }, [isMoreActive]);
+
   return (
     <div
       style={{
@@ -172,6 +211,8 @@ function SidebarContent({
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
 
+          const label = item.href === '/dashboard' ? 'Home' : 'Sell';
+
           return (
             <Link
               key={item.href}
@@ -216,10 +257,129 @@ function SidebarContent({
               >
                 {item.icon}
               </span>
-              <span>{item.label}</span>
+              <span>{label}</span>
             </Link>
           );
         })}
+
+        <button
+          type="button"
+          onClick={() => setIsMoreOpen((prev) => !prev)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 14px',
+            borderRadius: 14,
+            border: isMoreActive
+              ? '1px solid rgba(96, 165, 250, 0.4)'
+              : '1px solid transparent',
+            background: isMoreActive
+              ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.26), rgba(14, 165, 233, 0.14))'
+              : 'transparent',
+            color: isMoreActive ? '#f8fafc' : '#cbd5e1',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 10,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isMoreActive
+                ? 'rgba(248, 250, 252, 0.14)'
+                : 'rgba(148, 163, 184, 0.12)',
+              color: isMoreActive ? '#f8fafc' : '#94a3b8',
+              fontSize: 14,
+              flexShrink: 0,
+            }}
+          >
+            ≡
+          </span>
+          <span style={{ flex: 1, textAlign: 'left' }}>More</span>
+          <span aria-hidden="true" style={{ fontSize: 12, opacity: 0.9 }}>
+            {isMoreOpen ? '▴' : '▾'}
+          </span>
+        </button>
+
+        {isMoreOpen ? (
+          <div
+            style={{
+              marginTop: 6,
+              padding: 10,
+              borderRadius: 14,
+              border: '1px solid rgba(148, 163, 184, 0.18)',
+              background: 'rgba(15, 23, 42, 0.32)',
+              display: 'grid',
+              gap: 10,
+            }}
+          >
+            {moreNavigationGroups.map((group) => (
+              <div key={group.title} style={{ display: 'grid', gap: 6 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    color: '#94a3b8',
+                    padding: '0 8px',
+                  }}
+                >
+                  {group.title}
+                </div>
+
+                {group.items.map((item) => {
+                  const isActive =
+                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onNavigate}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 10px',
+                        borderRadius: 10,
+                        border: isActive
+                          ? '1px solid rgba(96, 165, 250, 0.36)'
+                          : '1px solid transparent',
+                        background: isActive
+                          ? 'rgba(59, 130, 246, 0.2)'
+                          : 'transparent',
+                        color: isActive ? '#f8fafc' : '#cbd5e1',
+                        textDecoration: 'none',
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 20,
+                          display: 'inline-flex',
+                          justifyContent: 'center',
+                          color: isActive ? '#e2e8f0' : '#94a3b8',
+                          fontSize: 12,
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </nav>
 
       <div
