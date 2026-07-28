@@ -486,8 +486,6 @@ export class QuotesService {
   }
 
   async findAll(tenantId: string) {
-    await this.expireOverdueQuotes(tenantId);
-
     return this.prisma.quote.findMany({
       where: {
         tenantId,
@@ -508,8 +506,6 @@ export class QuotesService {
   }
 
   async findOne(tenantId: string, quoteId: string) {
-    await this.expireOverdueQuotes(tenantId);
-
     const quote = await this.prisma.quote.findFirst({
       where: {
         id: quoteId,
