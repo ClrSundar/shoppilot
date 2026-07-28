@@ -74,32 +74,53 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    // Step 1: Resolve tenant by code (tenant identifier)
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { code: dto.tenantCode },
+    });
+
+    if (!tenant) {
+      throw new BadRequestException('Shop code not found');
+    }
+
+    // Step 2: Query user scoped by tenant AND email (composite query)
     const user = await this.prisma.user.findFirst({
-      where: { email: dto.email },
+      where: {
+        email: dto.email,
+        tenantId: tenant.id,
+      },
       include: { tenant: true },
     });
 
+    // Step 3: Validate user exists and is active (generic error for security)
     if (!user || !user.active) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Step 4: Validate password
     const validPassword = await bcrypt.compare(dto.password, user.password);
     if (!validPassword) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Step 5: Validate tenant status (tenant active state enforcement)
     if (user.tenant.status === TenantStatus.PENDING) {
-      throw new ForbiddenException('Your account is pending approval. Please wait for an administrator to approve your registration.');
+      throw new ForbiddenException(
+        'Your account is pending approval. Please wait for an administrator to approve your registration.',
+      );
     }
 
     if (user.tenant.status === TenantStatus.SUSPENDED) {
-      throw new ForbiddenException('Your account has been suspended. Please contact support.');
+      throw new ForbiddenException(
+        'Your account has been suspended. Please contact support.',
+      );
     }
 
     if (user.tenant.status === TenantStatus.CANCELLED) {
       throw new ForbiddenException('Your account has been cancelled.');
     }
 
+    // Step 6: Generate token with authenticated user (ensures JWT tenantId matches)
     return this.generateToken(user);
   }
 
