@@ -15,6 +15,20 @@ const inventoryMovementType = {
   DISPATCH: 'DISPATCH',
 } as const;
 
+// DEF-003: Quote State Transition Matrix
+// Defines all legal transitions. Same-state transitions are rejected.
+// INVOICED → REJECTED/CANCELLED transitions are pending business confirmation.
+const ALLOWED_TRANSITIONS = {
+  DRAFT: ['SENT', 'APPROVED', 'REJECTED', 'CANCELLED'],
+  SENT: ['APPROVED', 'REJECTED', 'CANCELLED'],
+  APPROVED: ['INVOICED', 'REJECTED', 'CANCELLED'],
+  INVOICED: ['DISPATCHED'], // Pending business decision on REJECTED/CANCELLED
+  DISPATCHED: [],
+  REJECTED: [],
+  CANCELLED: [],
+  EXPIRED: [],
+} as const satisfies Record<QuoteStatus, readonly QuoteStatus[]>;
+
 @Injectable()
 export class QuotesService {
   constructor(
@@ -540,6 +554,7 @@ export class QuotesService {
   ) {
     await this.expireOverdueQuotes(tenantId);
 
+    // Step 1: Load quote (tenant-scoped)
     const quote = await this.prisma.quote.findFirst({
       where: {
         id: quoteId,
@@ -554,59 +569,78 @@ export class QuotesService {
       throw new BadRequestException('Quote not found');
     }
 
-    if (quote.status === 'EXPIRED' && status !== 'EXPIRED') {
+    // Step 2: Validate transition BEFORE any writes (DEF-003)
+    const currentStatus = quote.status;
+
+    // AC2: Reject same-state transitions
+    if (currentStatus === status) {
+      throw new BadRequestException(
+        `Quote is already in ${status} state`,
+      );
+    }
+
+    // AC1: Reject illegal transitions against transition matrix
+    const allowedNextStates = ALLOWED_TRANSITIONS[currentStatus];
+    if (!allowedNextStates || !allowedNextStates.includes(status)) {
+      throw new BadRequestException(
+        `Cannot transition from ${currentStatus} to ${status}`,
+      );
+    }
+
+    // AC8: EXPIRED guard
+    if (currentStatus === 'EXPIRED' && status !== 'EXPIRED') {
       throw new BadRequestException(
         'Quote has expired. Create a revision to continue.',
       );
     }
 
+    // Step 3: Begin transaction only after validation passes (AC11: zero mutations on invalid transition)
     const updatedQuote = await this.prisma.$transaction(async (tx) => {
-      const currentStatus = quote.status as string;
+      // Handle inventory side effects based on target status
+      switch (status) {
+        case 'APPROVED':
+          // Reserve stock on first APPROVED (if not already reserved)
+          if (!quote.stockReserved) {
+            await this.reserveInventoryForQuote(tx, tenantId, userId, quote);
+          }
+          break;
 
-      if (status === 'APPROVED' && !quote.stockReserved) {
-        await this.reserveInventoryForQuote(tx, tenantId, userId, quote);
+        case 'DISPATCHED':
+          // Dispatch stock (decrement onHand and reserved)
+          if (quote.stockReserved) {
+            await this.dispatchInventoryForQuote(tx, tenantId, userId, quote);
+          }
+          break;
+
+        case 'REJECTED':
+        case 'CANCELLED':
+          // Release reserved stock
+          if (quote.stockReserved) {
+            await this.releaseInventoryForQuote(tx, tenantId, userId, quote);
+          }
+          break;
+
+        case 'INVOICED':
+          // No inventory operations for INVOICED
+          break;
+
+        case 'SENT':
+        case 'EXPIRED':
+          // No inventory operations for these states
+          break;
       }
 
-      if (status === 'INVOICED') {
-        if (currentStatus !== 'APPROVED' || !quote.stockReserved) {
-          throw new BadRequestException('Approve the quote before invoicing it');
-        }
-      }
-
-      if (status === 'DISPATCHED') {
-        if (currentStatus !== 'INVOICED') {
-          throw new BadRequestException('Generate an invoice before dispatching goods');
-        }
-
-        if (!quote.stockReserved) {
-          throw new BadRequestException('No reserved stock available to dispatch');
-        }
-
-        await this.dispatchInventoryForQuote(tx, tenantId, userId, quote);
-      }
-
-      if (
-        (status === 'CANCELLED' ||
-          status === 'REJECTED' ||
-          status === 'EXPIRED') &&
-        quote.stockReserved
-      ) {
-        await this.releaseInventoryForQuote(tx, tenantId, userId, quote);
-      }
-
+      // Compute stockReserved flag based on target status
       const stockReserved =
         status === 'APPROVED'
           ? true
-          : status === 'DISPATCHED'
+          : (status === 'DISPATCHED' || status === 'REJECTED' || status === 'CANCELLED')
             ? false
             : status === 'INVOICED'
               ? quote.stockReserved
-              : status === 'CANCELLED' ||
-                  status === 'REJECTED' ||
-                  status === 'EXPIRED'
-                ? false
-                : quote.stockReserved;
+              : quote.stockReserved;
 
+      // Update quote status and flags
       return tx.quote.update({
         where: {
           id: quoteId,
@@ -626,6 +660,7 @@ export class QuotesService {
       });
     });
 
+    // Post-transaction side effects
     if (status === 'INVOICED') {
       await this.commissionsService.createAccrualForInvoicedQuote(tenantId, quoteId);
     }
