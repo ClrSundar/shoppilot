@@ -82,6 +82,68 @@ export class CommissionsService {
     });
   }
 
+  async createAccrualForInvoicedQuoteWithinTransaction(
+    tenantId: string,
+    quoteId: string,
+    quote: {
+      id: string;
+      quoteNumber: string;
+      agentId: string | null;
+      subtotal: Prisma.Decimal;
+      taxableAmount: Prisma.Decimal | null;
+      taxAmount: Prisma.Decimal;
+      discountAmount: Prisma.Decimal;
+      agentCommissionPercentage: Prisma.Decimal | null;
+    },
+    tx: Prisma.TransactionClient,
+  ) {
+    // Skip if no agent or already has accrual
+    if (!quote.agentId) {
+      return null;
+    }
+
+    const existing = await tx.agentCommissionAccrual.findFirst({
+      where: {
+        tenantId,
+        quoteId,
+        reversalOfId: null,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const basisAmount = Number(quote.taxableAmount ?? quote.subtotal);
+    const rate = Number(quote.agentCommissionPercentage ?? 0);
+    const commissionAmount = this.round2((basisAmount * rate) / 100);
+
+    return tx.agentCommissionAccrual.create({
+      data: {
+        tenantId,
+        agentId: quote.agentId,
+        quoteId: quote.id,
+        basisAmount: new Prisma.Decimal(basisAmount),
+        commissionRate: new Prisma.Decimal(rate),
+        commissionAmount: new Prisma.Decimal(commissionAmount),
+        status: CommissionStatus.PENDING,
+        calculationSnapshot: {
+          basis: CommissionBasis.NET_SALES,
+          grossAmount: Number(quote.subtotal),
+          discountAmount: Number(quote.discountAmount),
+          eligibleAmount: basisAmount,
+          taxAmount: Number(quote.taxAmount),
+          rate,
+          commission: commissionAmount,
+        },
+        note: `Quote invoiced: ${quote.quoteNumber}`,
+      },
+    });
+  }
+
   async markAccrualsEarnedForQuotePayment(tenantId: string, quoteId: string, paymentId?: string) {
     const quote = await this.prisma.quote.findFirst({
       where: {

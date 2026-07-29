@@ -1232,6 +1232,7 @@ model AgentCommissionAccrual {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, quoteId])
   @@index([tenantId, agentId])
   @@index([quoteId])
   @@index([paymentId])

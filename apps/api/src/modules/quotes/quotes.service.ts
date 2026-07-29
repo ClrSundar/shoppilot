@@ -596,27 +596,100 @@ export class QuotesService {
 
     // Step 3: Begin transaction only after validation passes (AC11: zero mutations on invalid transition)
     const updatedQuote = await this.prisma.$transaction(async (tx) => {
+      // DEF-004: Architectural Invariant
+      // Every quote status transition (especially INVOICED) MUST use FOR UPDATE lock
+      // to serialize concurrent attempts. Without this lock, two concurrent invoice
+      // requests can both pass validation, enter the transaction, and create duplicate
+      // commission accruals despite the idempotent check (findFirst + create).
+      // The lock ensures: only one concurrent invoice succeeds, others fail at lock wait or status re-verify.
+      // This mirrors DEF-005 pattern for payment coordination.
+      // DEF-004: Lock and re-verify quote status before transition
+      // This prevents concurrent invoice attempts from creating duplicate accruals
+      // Mirrors DEF-005 pattern: serialize state mutations via FOR UPDATE lock
+      const lockedQuotes = await tx.$queryRaw<
+        Array<{
+          id: string;
+          status: QuoteStatus;
+          stockReserved: boolean;
+          invoicedAt: Date | null;
+          quoteNumber: string;
+          agentId: string | null;
+          subtotal: Prisma.Decimal;
+          taxableAmount: Prisma.Decimal | null;
+          taxAmount: Prisma.Decimal;
+          discountAmount: Prisma.Decimal;
+          agentCommissionPercentage: Prisma.Decimal | null;
+        }>
+      >`SELECT "id", "status", "stockReserved", "invoicedAt", "quoteNumber", "agentId", "subtotal", "taxableAmount", "taxAmount", "discountAmount", "agentCommissionPercentage"
+        FROM "Quote"
+        WHERE "id" = ${quoteId} AND "tenantId" = ${tenantId}
+        FOR UPDATE`;
+
+      const lockedQuote = lockedQuotes[0];
+      if (!lockedQuote) {
+        throw new BadRequestException('Quote not found');
+      }
+
+      // Load quote items for inventory operations (not covered by FOR UPDATE on Quote)
+      const quoteItems = await tx.quoteItem.findMany({
+        where: {
+          quoteId,
+        },
+        select: {
+          productId: true,
+          productName: true,
+          quantity: true,
+        },
+      });
+
+      // Re-verify status hasn't changed since loading outside transaction
+      if (lockedQuote.status !== quote.status) {
+        throw new BadRequestException(
+          `Quote status has changed. Expected ${quote.status}, found ${lockedQuote.status}`,
+        );
+      }
+
+      // Re-verify transition is still allowed (DEF-003)
+      const allowedNextStates = ALLOWED_TRANSITIONS[lockedQuote.status];
+      if (!allowedNextStates || !allowedNextStates.includes(status)) {
+        throw new BadRequestException(
+          `Cannot transition from ${lockedQuote.status} to ${status}`,
+        );
+      }
+
       // Handle inventory side effects based on target status
       switch (status) {
         case 'APPROVED':
           // Reserve stock on first APPROVED (if not already reserved)
-          if (!quote.stockReserved) {
-            await this.reserveInventoryForQuote(tx, tenantId, userId, quote);
+          if (!lockedQuote.stockReserved) {
+            await this.reserveInventoryForQuote(tx, tenantId, userId, {
+              id: lockedQuote.id,
+              quoteNumber: lockedQuote.quoteNumber,
+              items: quoteItems,
+            });
           }
           break;
 
         case 'DISPATCHED':
           // Dispatch stock (decrement onHand and reserved)
-          if (quote.stockReserved) {
-            await this.dispatchInventoryForQuote(tx, tenantId, userId, quote);
+          if (lockedQuote.stockReserved) {
+            await this.dispatchInventoryForQuote(tx, tenantId, userId, {
+              id: lockedQuote.id,
+              quoteNumber: lockedQuote.quoteNumber,
+              items: quoteItems,
+            });
           }
           break;
 
         case 'REJECTED':
         case 'CANCELLED':
           // Release reserved stock
-          if (quote.stockReserved) {
-            await this.releaseInventoryForQuote(tx, tenantId, userId, quote);
+          if (lockedQuote.stockReserved) {
+            await this.releaseInventoryForQuote(tx, tenantId, userId, {
+              id: lockedQuote.id,
+              quoteNumber: lockedQuote.quoteNumber,
+              items: quoteItems,
+            });
           }
           break;
 
@@ -637,18 +710,18 @@ export class QuotesService {
           : (status === 'DISPATCHED' || status === 'REJECTED' || status === 'CANCELLED')
             ? false
             : status === 'INVOICED'
-              ? quote.stockReserved
-              : quote.stockReserved;
+              ? lockedQuote.stockReserved
+              : lockedQuote.stockReserved;
 
       // Update quote status and flags
-      return tx.quote.update({
+      const updatedQuoteResult = await tx.quote.update({
         where: {
           id: quoteId,
         },
         data: {
           status: status as never,
           stockReserved,
-          ...(status === 'INVOICED' && quote.invoicedAt === null
+          ...(status === 'INVOICED' && lockedQuote.invoicedAt === null
             ? { invoicedAt: new Date() }
             : {}),
         },
@@ -658,12 +731,29 @@ export class QuotesService {
           items: true,
         },
       });
-    });
 
-    // Post-transaction side effects
-    if (status === 'INVOICED') {
-      await this.commissionsService.createAccrualForInvoicedQuote(tenantId, quoteId);
-    }
+      // DEF-004: Create commission accrual atomically within same transaction
+      // Quote is locked and status verified, so concurrent invoice attempts are serialized
+      if (status === 'INVOICED') {
+        await this.commissionsService.createAccrualForInvoicedQuoteWithinTransaction(
+          tenantId,
+          quoteId,
+          {
+            id: lockedQuote.id,
+            quoteNumber: lockedQuote.quoteNumber,
+            agentId: lockedQuote.agentId,
+            subtotal: lockedQuote.subtotal,
+            taxableAmount: lockedQuote.taxableAmount,
+            taxAmount: lockedQuote.taxAmount,
+            discountAmount: lockedQuote.discountAmount,
+            agentCommissionPercentage: lockedQuote.agentCommissionPercentage,
+          },
+          tx,
+        );
+      }
+
+      return updatedQuoteResult;
+    });
 
     return updatedQuote;
   }
