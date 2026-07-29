@@ -131,6 +131,60 @@ export class CommissionsService {
     });
   }
 
+  async markAccrualsEarnedWithinTransaction(
+    tenantId: string,
+    quoteId: string,
+    tx: Prisma.TransactionClient,
+    paymentId?: string,
+  ) {
+    const quote = await tx.quote.findFirst({
+      where: {
+        id: quoteId,
+        tenantId,
+      },
+      select: {
+        id: true,
+        totalAmount: true,
+      },
+    });
+
+    if (!quote) {
+      return;
+    }
+
+    const paymentSum = await tx.payment.aggregate({
+      where: {
+        tenantId,
+        quoteId,
+        direction: PaymentDirection.RECEIVED,
+        status: PaymentStatus.COMPLETED,
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+
+    const paidAmount = Number(paymentSum._sum.amount ?? 0);
+    const quoteTotal = Number(quote.totalAmount);
+
+    if (paidAmount < quoteTotal) {
+      return;
+    }
+
+    await tx.agentCommissionAccrual.updateMany({
+      where: {
+        tenantId,
+        quoteId,
+        status: CommissionStatus.PENDING,
+      },
+      data: {
+        status: CommissionStatus.EARNED,
+        earnedAt: new Date(),
+        ...(paymentId ? { paymentId } : {}),
+      },
+    });
+  }
+
   async createReversalForCompletedSalesReturn(tenantId: string, productReturnId: string) {
     const productReturn = await this.prisma.productReturn.findFirst({
       where: {
